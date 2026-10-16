@@ -60,8 +60,11 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
 1. https://console.cloud.google.com › criar projeto "Banco de laudos" (o mesmo projeto pode servir ao app-calorias).
 2. APIs e serviços › Biblioteca › **Google Drive API** › Ativar.
 3. Tela de permissão OAuth (Google Auth Platform): tipo **Externo**, nome "Banco de laudos", e-mail do Artur; escopo
-   `.../auth/drive.file`; depois **Publicar o app** (Em produção) — com `drive.file` não precisa de verificação, e assim o
-   acesso não expira a cada 7 dias como no modo Teste (aparece só um aviso de "app não verificado" no primeiro login).
+   `.../auth/drive.file`. Para **Publicar o app** (Em produção) o Google exige, em **Branding**: página inicial
+   `https://arturaragao.github.io/banco-laudos/`, política de privacidade
+   `https://arturaragao.github.io/banco-laudos/privacidade.html` (criada em 16/10) e domínio autorizado
+   `arturaragao.github.io`. Com `drive.file` não precisa de verificação; em produção o acesso não expira a cada 7 dias como
+   no modo Teste (aparece só um aviso de "app não verificado" no primeiro login).
 4. Credenciais › Criar › **ID do cliente OAuth** › Aplicativo da Web › Origens JavaScript autorizadas:
    `https://arturaragao.github.io` e `http://localhost:8765`. Sem URI de redirecionamento.
 5. Copiar o **ID do cliente** (termina em `.apps.googleusercontent.com`) e mandar na conversa → vai para `config.js`.
