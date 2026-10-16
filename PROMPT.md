@@ -113,8 +113,28 @@ CSV (Excel, ";") e PDF (imprimir) · lixeira de 30 dias (depois vira lápide e a
 edição no PC no mesmo laudo ficam os dois. Preferências em `preferencias.json.gz` (`lib/prefs.js`, item a item: buscas,
 histórico, frases, coleções). A ponte com a extensão compara só o conteúdo e preserva as anotações do app.
 Arquivos novos: `lib/indice.js` (índice, facetas, ordem, destaque, parecidos, estatísticas), `lib/classificacoes.js`,
-`lib/aproximada.js`, `lib/prefs.js`, `ui/visor.js`. Testes: 18 em `ferramentas/testes.mjs`.
+`lib/aproximada.js`, `lib/prefs.js`, `ui/visor.js`. Testes (na v2): 18 em `ferramentas/testes.mjs`.
 
-## 8. Pendências
-1. Teste de uso da v2 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
+## 9. v2.1 (16/10/2026): ajustes pedidos depois de ver a v2
+- **"Achados" (etiquetas laranja) escondidos**: some do cartão, dos filtros e das estatísticas. Os dados continuam salvos
+  (`etiquetas`, grupo `achado` no `lib/indice.js`); para voltar, pôr "achado" em `GRUPOS` no `app.js`.
+- **Destaque novo da conclusão** (`lib/destaque.js`, só no app; o `destacarConclusao` da extensão continua igual lá):
+  item normal/recomendação/comparação/irrelevante (pequeno derrame, alterações degenerativas, granulomas calcificados, cistos
+  simples, "não se aplica"...) fica sem destaque; no item alterado destaca o ACHADO + adjetivos ("Nódulo pulmonar sólido"),
+  o diagnóstico depois de "sugestivo de/compatível com" e as classificações; nunca medidas, lado, lugar, "leve/discreto" ou
+  trecho negado. O negrito/sublinhado antigo da conclusão (vindo do Notion) é trocado por este, menos nos laudos com
+  `destaqueManual` (formatados à mão). Para afinar: o Artur manda "como está / como quero" e se ajustam as listas
+  `NADA`, `ACHADOS`, `PARA`, `ANTES` do `lib/destaque.js` (+ teste em `ferramentas/testes.mjs`).
+- **Títulos agrupados** (`lib/nomes.js`, `tituloExame`): sem "DE/DA/DO/DOS/DAS", ABDÔMEN/ABDOMEN → ABDOME, TOMOGRAFIA → TC,
+  RESSONÂNCIA → RM, ULTRASSONOGRAFIA → US; a grafia mais usada (com acento) vira a oficial. "TC DE TÓRAX" = "TC TÓRAX".
+- **Médicos** (`nomeMedico`): sem "Dr./Dra.", só a primeira letra de cada nome maiúscula ("João da Silva").
+- **Modalidade**: lê "ct", "CT\SR"... e, sem modalidade, o começo do título — não aparece mais um "TC" repetido.
+- **Filtros em cima** da lista (não mais na lateral), abrem/fecham no botão "Filtros" (no PC começam abertos).
+- **Períodos**: Tudo · Hoje · 3d · 7d · 30d · 3m · 12m (+ datas no painel). **Tirado o "Com imagem".** ★ = só favoritos.
+- **Relevância** = laudos com alterações mais raras/interessantes/complexas primeiro: soma da raridade (idf) dos 3 achados e
+  classificações mais raros do banco + gravidade (neoplasia, TEP, aneurisma, RADS alto...) + nº de itens alterados.
+  Normais no fim. Testes: 21.
+
+## 10. Pendências
+1. Teste de uso da v2.1 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.

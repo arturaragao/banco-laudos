@@ -8,10 +8,13 @@ import { sincronizar, imagemDe } from "./lib/nuvem.js";
 import * as drive from "./lib/drive.js";
 import { comExtensao, procurarExtensao, extensao } from "./lib/ponte.js";
 import { camposDaEdicao, recalculo } from "./lib/regras.js";
-import { indexar, filtrar, ordenar, termosPositivos, marcar, parecidos, estatisticas, GRUPOS } from "./lib/indice.js";
+import { indexar, padronizar, filtrar, ordenar, termosPositivos, marcar, parecidos, estatisticas } from "./lib/indice.js";
+import { destacar } from "./lib/destaque.js";
 import { vocabulario, corrigir } from "./lib/aproximada.js";
 import { abreviarTitulo, separarLinhas, textoDoParagrafo } from "./lib/laudo2notion.js";
-import { dividirLaudo, resumoLaudo, itensConclusao, destacarConclusao, cabecalho } from "./lib/secoes.js";
+import { dividirLaudo, resumoLaudo, itensConclusao, cabecalho } from "./lib/secoes.js";
+// grupos de filtro que aparecem ("achado" fica guardado, escondido a pedido do Artur em 16/10/2026)
+const GRUPOS = ["mod", "exame", "medico", "classe", "colecao"];
 import { abrirVisor, visorAberto, fecharVisor } from "./ui/visor.js";
 
 const $ = (id) => document.getElementById(id);
@@ -25,7 +28,7 @@ drive.prepararLogin();
 
 // ---------- estado ----------
 const PADRAO = { q: "", onde: "tudo", periodo: "", de: "", ate: "", normal: "", fav: false, img: false, ordem: "recente", facetas: {} };
-let F = { ...PADRAO, ...lerLocal("banco.f", {}) };
+let F = { ...PADRAO, ...lerLocal("banco.f", {}), img: false };
 let vista = "laudos";                       // laudos | lixeira
 let estudo = lerLocal("app.estudo", false);
 let MOSTRAR_RESUMO = lerLocal("app.mostrarResumo", false);
@@ -41,7 +44,7 @@ const urls = [];
 async function carregar() {
   const regs = [];
   await db.percorrer((r) => { regs.push(r); });
-  todos = regs.map(indexar);
+  todos = padronizar(regs.map(indexar));
   vocab = null;
   P = await prefs.ler();
   $("historico").innerHTML = Object.entries(P.historico).sort((a, b) => b[1].em - a[1].em).map(([t]) => `<option value="${esc(t)}">`).join("");
@@ -50,9 +53,8 @@ async function carregar() {
 function dataMenos(dias) { const d = new Date(Date.now() - dias * DIA); return d.toISOString().slice(0, 10); }
 function filtroEfetivo() {
   const f = { ...F };
-  if (F.periodo === "7d") { f.de = dataMenos(6); f.ate = ""; }
-  else if (F.periodo === "30d") { f.de = dataMenos(29); f.ate = ""; }
-  else if (F.periodo === "12m") { f.de = dataMenos(365); f.ate = ""; }
+  const dias = { hoje: 0, "3d": 2, "7d": 6, "30d": 29, "3m": 91, "12m": 365 }[F.periodo];
+  if (dias != null) { f.de = dataMenos(dias); f.ate = ""; }
   else if (F.periodo !== "datas") { f.de = ""; f.ate = ""; }
   return f;
 }
@@ -73,7 +75,7 @@ async function buscar() {
   termos = /^\d{5,}$/.test(q) ? [] : termosPositivos(consultaUsada);
   const base = todos.filter((ix) => (vista === "lixeira" ? ix.r.lixeiraEm : !ix.r.lixeiraEm));
   const { lista, contagens } = filtrar(base, filtroEfetivo(), consultaUsada);
-  achados = ordenar(lista, F.ordem, consultaUsada);
+  achados = ordenar(lista, F.ordem, consultaUsada, base);
   $("aviso").dataset.troca = trocas.length ? `Busquei por <b>${esc(consultaUsada)}</b> (você digitou ${trocas.map(([a]) => `“${esc(a)}”`).join(", ")})` : "";
   mostrarAviso();
   desenharTopo();
@@ -110,7 +112,6 @@ function desenharTopo() {
   $("ordem").value = F.ordem;
   document.querySelectorAll("[data-periodo]").forEach((b) => b.classList.toggle("on", b.dataset.periodo === F.periodo || (b.dataset.periodo === "" && !F.periodo)));
   $("pFav").classList.toggle("on", !!F.fav);
-  $("pImg").classList.toggle("on", !!F.img);
   const n = GRUPOS.reduce((s, g) => s + (F.facetas[g]?.length || 0), 0) + (F.normal ? 1 : 0) + (F.periodo === "datas" ? 1 : 0);
   $("bFiltros").textContent = n ? `Filtros (${n})` : "Filtros";
   $("bFiltros").classList.toggle("on", n > 0);
@@ -166,14 +167,14 @@ const htmlPar = (p, marca = true) => p.map(({ t, b, i, u }) => {
   if (b) x = `<b>${x}</b>`;
   return x;
 }).join("");
-const fmtConc = (r, p, marca) => htmlPar(r.destaqueManual ? semNum(p) : destacarConclusao(semNum(p)), marca);
+// conclusão: formatação à mão (destaqueManual) ou o destaque novo do app (lib/destaque.js: só o achado principal)
+const fmtConc = (r, p, marca) => htmlPar(r.destaqueManual ? semNum(p) : destacar(semNum(p)), marca);
 const nImgs = (r) => Math.max(r.nImagens || 0, r.imgs?.length || 0, r.imgsLocais || 0);
 
 function cartao(ix) {
   const r = completar(ix.r);
-  const conc = r.concPars.length ? r.concPars.map((p) => fmtConc(r, p)) : r.itensConc.map((c) => htmlPar(destacarConclusao([{ t: c }])));
+  const conc = r.concPars.length ? r.concPars.map((p) => fmtConc(r, p)) : r.itensConc.map((c) => htmlPar(destacar([{ t: c, b: false, i: false, u: false }])));
   const tags = [...ix.classes.map((v) => `<button class="tag classe" data-g="classe" data-v="${esc(v)}">${esc(v)}</button>`),
-    ...ix.achadosEtq.map((v) => `<button class="tag achado" data-g="achado" data-v="${esc(v)}">${esc(v)}</button>`),
     ...(r.colecoes || []).map((v) => `<button class="tag colecao" data-g="colecao" data-v="${esc(v)}">${esc(v)}</button>`)].join("");
   const lixeira = vista === "lixeira";
   const n = nImgs(r);
@@ -181,10 +182,10 @@ function cartao(ix) {
     <div class="esconde"><button data-acao="revelar">Mostrar conclusão</button></div>
     <ol class="conc" hidden>${conc.map((c) => `<li>${c}</li>`).join("")}</ol>`;
   return `<div class="item ${r.normal ? "normal" : ""}" data-acc="${esc(r.acc)}">
-    <div class="cab" title="Abrir o laudo completo"><div class="cabtxt"><span class="acc">${esc(r.acc)}</span><span class="data">${dataBr(r.data)}</span><span class="titulo">${esc(r.titulo)}</span></div><div class="cabbtn">
+    <div class="cab" title="Abrir o laudo completo"><div class="cabtxt"><span class="acc">${esc(r.acc)}</span><span class="data">${dataBr(r.data)}</span><span class="titulo">${esc(ix.exame)}</span></div><div class="cabbtn">
       ${lixeira ? "" : `<button class="icone fav ${r.fav ? "on" : ""}" data-acao="fav" title="Favorito (f)">${r.fav ? "★" : "☆"}</button>`}
       <button class="icone" data-acao="${lixeira ? "apagarDeVez" : "lixeira"}" title="${lixeira ? "Apagar de vez" : "Mover para a lixeira"}">🗑</button></div></div>
-    <div class="sub">${[esc(r.medico || ""), esc([r.sexo, r.idade != null ? r.idade + " anos" : ""].filter(Boolean).join(", ")),
+    <div class="sub">${[esc(ix.medico), esc([r.sexo, r.idade != null ? r.idade + " anos" : ""].filter(Boolean).join(", ")),
       n ? `🖼 ${n}` : "", r.indicacao ? `Indicação: ${esc(r.indicacao)}` : "",
       lixeira ? `na lixeira desde ${new Date(r.lixeiraEm).toLocaleDateString("pt-BR")}` : ""].filter(Boolean).join(" · ")}</div>
     ${!estudo && tags ? `<div class="tags">${tags}</div>` : ""}
@@ -253,7 +254,7 @@ async function abrir(item, forcar) {
       <button data-acao="frase" title="Guarda o trecho selecionado (ou a conclusão) como frase-modelo">＋ Frase</button>
       <button data-acao="colecoes">Coleções</button>${r.notionId && r.notionPagina ? `<button data-acao="notion">Notion ↗</button>` : ""}</div>
     <div class="notaEd"><textarea data-nota placeholder="Nota pessoal (só sua; vai para todos os aparelhos)">${esc(r.nota || "")}</textarea></div>
-    ${par.length ? `<div class="parecidos"><b>Laudos parecidos</b>${par.map((p) => `<a data-ir="${esc(p.r.acc)}">${esc(abreviarTitulo(p.r.titulo))} · ${dataBr(p.r.data)} — ${esc((p.r.resumo || p.achadosEtq.join(", ")).slice(0, 90))}</a>`).join("")}</div>` : ""}`}`;
+    ${par.length ? `<div class="parecidos"><b>Laudos parecidos</b>${par.map((p) => `<a data-ir="${esc(p.r.acc)}">${esc(p.exame)} · ${dataBr(p.r.data)} — ${esc((p.r.resumo || "").slice(0, 90))}</a>`).join("")}</div>` : ""}`}`;
   const imgs = box.querySelector(".imgs");
   if (imgs) carregarImagens(imgs, r);
 }
@@ -320,7 +321,8 @@ async function irPara(acc) {
   if (item) { abrir(item); selecionar(item, true); }
 }
 async function copiar(r) {
-  const txt = [r.titulo, `Acesso ${r.acc} · ${dataBr(r.data)} · ${r.medico || ""}`, "", ...(r.pars || []).map((p) => p.map((s) => s.t).join(""))].join("\n");
+  const ix = acharIx(r.acc);
+  const txt = [ix?.exame || r.titulo, `Acesso ${r.acc} · ${dataBr(r.data)} · ${ix?.medico || r.medico || ""}`, "", ...(r.pars || []).map((p) => p.map((s) => s.t).join(""))].join("\n");
   try { await navigator.clipboard.writeText(txt); msg("Laudo copiado"); } catch { msg("Não consegui copiar"); }
 }
 
@@ -515,8 +517,9 @@ $("onde").addEventListener("change", () => { F.onde = $("onde").value; buscar();
 $("ordem").addEventListener("change", () => { F.ordem = $("ordem").value; buscar(); });
 document.querySelectorAll("[data-periodo]").forEach((b) => b.addEventListener("click", () => { F.periodo = b.dataset.periodo; F.de = F.ate = ""; buscar(); }));
 $("pFav").addEventListener("click", () => { F.fav = !F.fav; buscar(); });
-$("pImg").addEventListener("click", () => { F.img = !F.img; buscar(); });
-$("bFiltros").addEventListener("click", () => document.body.classList.toggle("filtros"));
+// filtros em cima da lista (abre/fecha; no PC começa aberto)
+if (lerLocal("app.filtrosAbertos", innerWidth >= 1000)) document.body.classList.add("filtros");
+$("bFiltros").addEventListener("click", () => gravarLocal("app.filtrosAbertos", document.body.classList.toggle("filtros")));
 $("faixa").addEventListener("click", async (e) => {
   const a = e.target.dataset.faixa;
   if (a === "sairLixeira") { vista = "laudos"; buscar(); }
@@ -600,7 +603,7 @@ function desenharEstat() {
       <div><b>${s.medico.length}</b><span>médicos</span></div><div><b>${s.exame.length}</b><span>tipos de exame</span></div></div>
     ${meses.length ? `<h3 style="font-size:13px;margin:0">Laudos por mês</h3><div class="meses">${meses.map(([m, n]) => `<i style="height:${(n / mx) * 100}%" title="${m}: ${n}"></i>`).join("")}</div>
       <div class="meses-rot"><span>${meses[0][0]}</span><span>${meses[meses.length - 1][0]}</span></div>` : ""}
-    ${barras("Achados mais comuns", s.achado, "achado")}${barras("Classificações", s.classe, "classe")}${barras("Exames", s.exame, "exame")}
+    ${barras("Classificações", s.classe, "classe")}${barras("Exames", s.exame, "exame")}
     ${barras("Médicos", s.medico, "medico")}${barras("Modalidades", s.mod, "mod")}
     <small>Toque num item para filtrar por ele.</small>`;
 }
@@ -617,9 +620,9 @@ function baixar(nome, conteudo, tipo) {
 }
 function exportarCsv() {
   const cel = (v) => { const s = String(v ?? ""); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const cab = ["acesso", "data", "exame", "modalidade", "medico", "idade", "sexo", "indicacao", "conclusao", "classificacoes", "achados", "colecoes", "favorito", "nota"];
-  const linhas = achados.map((ix) => { const r = completar(ix.r); return [r.acc, dataBr(r.data), r.titulo, ix.mod, r.medico, r.idade ?? "", r.sexo || "", r.indicacao || "",
-    r.itensConc.map((c, i) => `${i + 1}. ${c}`).join(" "), ix.classes.join(", "), ix.achadosEtq.join(", "), (r.colecoes || []).join(", "), r.fav ? "sim" : "", r.nota || ""].map(cel).join(";"); });
+  const cab = ["acesso", "data", "exame", "modalidade", "medico", "idade", "sexo", "indicacao", "conclusao", "classificacoes", "colecoes", "favorito", "nota"];
+  const linhas = achados.map((ix) => { const r = completar(ix.r); return [r.acc, dataBr(r.data), ix.exame, ix.mod, ix.medico, r.idade ?? "", r.sexo || "", r.indicacao || "",
+    r.itensConc.map((c, i) => `${i + 1}. ${c}`).join(" "), ix.classes.join(", "), (r.colecoes || []).join(", "), r.fav ? "sim" : "", r.nota || ""].map(cel).join(";"); });
   baixar(`laudos-${new Date().toISOString().slice(0, 10)}.csv`, "﻿" + [cab.join(";"), ...linhas].join("\r\n"), "text/csv;charset=utf-8");
   msg(`${achados.length} laudo(s) exportado(s)`);
 }
@@ -627,7 +630,7 @@ function exportarPdf() {
   const t0 = termos; termos = [];
   $("impressao").innerHTML = `<h1>Banco de laudos — ${achados.length} laudo(s)${F.q ? ` · busca: ${esc(F.q)}` : ""}</h1>` + achados.map((ix) => {
     const r = completar(ix.r);
-    return `<div class="p"><b>${esc(r.titulo)}</b> — ${dataBr(r.data)} · acesso ${esc(r.acc)} · ${esc(r.medico || "")}<br>
+    return `<div class="p"><b>${esc(ix.exame)}</b> — ${dataBr(r.data)} · acesso ${esc(r.acc)} · ${esc(ix.medico)}<br>
       ${r.indicacao ? `<i>Indicação:</i> ${esc(r.indicacao)}<br>` : ""}${r.itensConc.map((c, i) => `${i + 1}. ${esc(c)}`).join("<br>")}${r.nota ? `<br><i>Nota:</i> ${esc(r.nota)}` : ""}</div>`;
   }).join("");
   termos = t0;

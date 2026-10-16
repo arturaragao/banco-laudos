@@ -50,16 +50,18 @@
   .l3::-webkit-scrollbar{display:none}
   .pilula{border:1px solid rgba(255,255,255,.35);background:transparent;color:var(--topo-texto);border-radius:999px;padding:4px 11px;font-size:12.5px}
   [data-tema="escuro"] .pilula{border-color:var(--borda2)}
-  .pilula.on{background:var(--topo-texto);color:var(--topo);border-color:var(--topo-texto)}
-  [data-tema="escuro"] .pilula.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
+  body.filtros #bFiltros,.pilula.on{background:var(--topo-texto);color:var(--topo);border-color:var(--topo-texto)}
+  [data-tema="escuro"] body.filtros #bFiltros,.pilula.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
   .l3 select{width:auto;padding:4px 8px;font-size:12.5px;border-radius:999px;background:transparent;color:var(--topo-texto);border-color:rgba(255,255,255,.35)}
   .l3 select option{color:#202124}
   #aviso{max-width:1280px;margin:6px auto 0;font-size:12.5px;color:var(--topo-suave);min-height:0}
   #aviso:empty{display:none}
   #aviso b{color:var(--topo-texto)}
   /* corpo */
-  #corpo{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:270px minmax(0,1fr);gap:16px;padding:14px 14px 90px}
-  aside{position:sticky;top:150px;align-self:start;max-height:calc(100vh - 165px);overflow:auto;font-size:13px}
+  #corpo{max-width:1280px;margin:0 auto;padding:14px 14px 90px}
+  #facetas{display:none;background:var(--cartao);border:1px solid var(--borda);border-radius:12px;padding:12px 14px 4px;margin-bottom:12px;font-size:13px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 18px}
+  body.filtros #facetas{display:grid}
+  #bLimparTudo{grid-column:1/-1;justify-self:start;width:auto;margin-bottom:10px}
   .grupo{margin-bottom:14px}
   .grupo h3{margin:0 0 6px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--suave);font-weight:600;display:flex;justify-content:space-between}
   .chips{display:flex;flex-wrap:wrap;gap:5px}
@@ -71,7 +73,6 @@
   .mais{border:none;background:none;color:var(--acento-texto);padding:2px 4px;font-size:12px}
   .datas{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .datas input,.grupo select{padding:6px 8px;font-size:13px}
-  #bLimparTudo{width:100%;margin-top:4px}
   /* lista */
   #faixa{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:var(--acento-fundo);color:var(--acento-texto);font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   #faixa:empty{display:none}
@@ -159,11 +160,8 @@
   kbd{font-family:Consolas,monospace;background:var(--campo);border:1px solid var(--borda2);border-radius:4px;padding:0 5px;font-size:12px}
   #impressao{display:none}
   @media (max-width:999px){
-    #corpo{grid-template-columns:minmax(0,1fr);padding:10px 10px 90px}
-    aside{position:static;max-height:none;display:none;background:var(--cartao);border:1px solid var(--borda);border-radius:12px;padding:12px}
-    body.filtros aside{display:block}
+    #corpo{padding:10px 10px 90px}
   }
-  @media (min-width:1000px){#bFiltros{display:none}}
   @media (max-width:600px){.l1 h1{flex-direction:column;gap:0;font-size:16px;line-height:1.2}.l1 h1 small{font-size:11.5px}#bSync .longo{display:none}}
   @media print{
     body>*:not(#impressao){display:none!important}
@@ -188,20 +186,22 @@
   </div>
   <div class="l3">
     <button class="pilula" id="bFiltros">Filtros</button>
-    <button class="pilula" data-periodo="">Todo período</button>
-    <button class="pilula" data-periodo="7d">7 dias</button>
-    <button class="pilula" data-periodo="30d">30 dias</button>
-    <button class="pilula" data-periodo="12m">12 meses</button>
-    <button class="pilula" id="pFav">★ Favoritos</button>
-    <button class="pilula" id="pImg">🖼 Com imagem</button>
+    <button class="pilula" data-periodo="" title="Todo o período">Tudo</button>
+    <button class="pilula" data-periodo="hoje" title="Hoje">Hoje</button>
+    <button class="pilula" data-periodo="3d" title="Últimos 3 dias">3d</button>
+    <button class="pilula" data-periodo="7d" title="Últimos 7 dias">7d</button>
+    <button class="pilula" data-periodo="30d" title="Últimos 30 dias">30d</button>
+    <button class="pilula" data-periodo="3m" title="Últimos 3 meses">3m</button>
+    <button class="pilula" data-periodo="12m" title="Últimos 12 meses">12m</button>
+    <button class="pilula" id="pFav" title="Só favoritos">★</button>
     <select id="ordem" title="Ordenar"><option value="recente">Mais recentes</option><option value="antigo">Mais antigos</option><option value="relevancia">Relevância</option></select>
   </div>
   <div id="aviso"></div>
 </header>
 
 <div id="corpo">
-  <aside id="facetas"></aside>
   <main>
+    <section id="facetas"></section>
     <div id="faixa"></div>
     <section id="lista"><div class="vazio">Carregando…</div></section>
   </main>

@@ -303,6 +303,40 @@ await teste("Classificações, busca aproximada e facetas", async () => {
   assert.equal(filtrar(ixs, {}, "22222").lista.length, 1, "número de acesso");
 });
 
+await teste("Destaque da conclusão: só o achado principal, nada nos itens normais", async () => {
+  const { destacar } = await import("../lib/destaque.js");
+  const d = (t) => destacar([{ t, b: true, i: false, u: true }]).map((s) => (s.b ? `[${s.t}]` : s.t)).join("");
+  assert.equal(d("Nódulo pulmonar sólido no lobo superior direito, medindo 9 mm, Lung-RADS 4A."), "[Nódulo pulmonar sólido] no lobo superior direito, medindo 9 mm, [Lung-RADS 4A].");
+  assert.equal(d("Nódulos pulmonares múltiplos, sugestivos de implantes secundários."), "[Nódulos pulmonares múltiplos], sugestivos de [implantes secundários].");
+  assert.equal(d("Demais estruturas sem alterações."), "Demais estruturas sem alterações.", "negrito antigo some");
+  assert.equal(d("Fleischner não se aplica."), "Fleischner não se aplica.");
+  assert.equal(d("Pequeno derrame pleural à direita."), "Pequeno derrame pleural à direita.");
+  assert.equal(d("Apendicite aguda, sem sinais de perfuração."), "[Apendicite aguda], sem sinais de perfuração.");
+  assert.equal(d("Tendinopatia do supraespinal com ruptura parcial articular."), "[Tendinopatia do supraespinal] com [ruptura parcial articular].");
+});
+
+await teste("Títulos e médicos padronizados; modalidade", async () => {
+  const { tituloExame, nomeMedico } = await import("../lib/nomes.js");
+  assert.equal(tituloExame("TC DE TÓRAX"), tituloExame("TC TÓRAX"));
+  assert.equal(tituloExame("TC DE ABDOMEN TOTAL"), "TC ABDOME TOTAL");
+  assert.equal(nomeMedico("DR. JOÃO DA SILVA"), "João da Silva");
+  assert.equal(nomeMedico("Dra. maria souza"), "Maria Souza");
+  const { modalidade } = await import("../lib/indice.js");
+  assert.equal(modalidade({ mod: "ct" }), "TC");
+  assert.equal(modalidade({ mod: "CT\\SR" }), "TC");
+  assert.equal(modalidade({ mod: "", titulo: "TC DE TÓRAX" }), "TC");
+});
+
+await teste("Relevância: raros e graves primeiro, normais no fim", async () => {
+  const { indexar, ordenar } = await import("../lib/indice.js");
+  const L = (acc, conc) => indexar({ acc, data: "2026-10-0" + acc.slice(-1), titulo: "TC", texto: conc, pars: [[{ t: "Conclusão:", b: true }], [{ t: "1. " + conc }]] });
+  const ixs = [L("r0001", "Estudo dentro dos limites da normalidade."), L("r0002", "Esteatose hepática moderada."), L("r0003", "Esteatose hepática leve."),
+    L("r0004", "Massa hepática sugestiva de hepatocarcinoma, LI-RADS 5."), L("r0005", "Esteatose hepática acentuada.")];
+  const ord = ordenar([...ixs], "relevancia", "", ixs).map((x) => x.r.acc);
+  assert.equal(ord[0], "r0004");
+  assert.equal(ord[ord.length - 1], "r0001");
+});
+
 await teste("Resumo: refaz nos registros antigos sem marcar como edição", async () => {
   no(PC); const b1 = await db.laudo("A1");
   const c = recalculo({ ...b1, resumoVersao: 0 });
