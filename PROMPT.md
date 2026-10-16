@@ -49,7 +49,7 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
 | `lib/nuvem.js` | sincronização com qualquer nuvem (adaptador) |
 | `lib/drive.js` | adaptador Google Drive + login |
 | `lib/ponte.js` | conversa com a extensão (`window.postMessage` ↔ `ponte.js` da extensão ↔ `ponte()` no background dela) |
-| `config.js` | **`clienteId`** do OAuth (vazio até o Artur criar) |
+| `config.js` | **`clienteId`** do OAuth (já preenchido) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (abre offline; instalar pelo Chrome › "Adicionar à tela inicial") |
 | `ferramentas/testes.mjs` | 12 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
 | `ferramentas/servidor.mjs` | servidor local `http://localhost:8765` (a extensão também conversa com essa origem) |
