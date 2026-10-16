@@ -115,7 +115,7 @@ histórico, frases, coleções). A ponte com a extensão compara só o conteúdo
 Arquivos novos: `lib/indice.js` (índice, facetas, ordem, destaque, parecidos, estatísticas), `lib/classificacoes.js`,
 `lib/aproximada.js`, `lib/prefs.js`, `ui/visor.js`. Testes (na v2): 18 em `ferramentas/testes.mjs`.
 
-## 9. v2.1 (16/10/2026): ajustes pedidos depois de ver a v2
+## 8. v2.1 (16/10/2026): ajustes pedidos depois de ver a v2
 - **"Achados" (etiquetas laranja) escondidos**: some do cartão, dos filtros e das estatísticas. Os dados continuam salvos
   (`etiquetas`, grupo `achado` no `lib/indice.js`); para voltar, pôr "achado" em `GRUPOS` no `app.js`.
 - **Destaque novo da conclusão** (`lib/destaque.js`, só no app; o `destacarConclusao` da extensão continua igual lá):
@@ -135,6 +135,6 @@ Arquivos novos: `lib/indice.js` (índice, facetas, ordem, destaque, parecidos, e
   classificações mais raros do banco + gravidade (neoplasia, TEP, aneurisma, RADS alto...) + nº de itens alterados.
   Normais no fim. Testes: 21.
 
-## 10. Pendências
+## 9. Pendências
 1. Teste de uso da v2.1 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
