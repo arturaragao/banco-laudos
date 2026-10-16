@@ -216,6 +216,18 @@ await teste("Parou no meio das imagens: o texto já está na nuvem e depois cont
   assert.equal((await db.laudo("C1")).imgs.length, 6);
 });
 
+await teste("Imagens repetidas no Drive: apaga as cópias, nunca uma imagem usada", async () => {
+  const { escolherRepetidas, hashDe } = await import("../lib/drive.js");
+  const arqs = [
+    { id: "a", name: "X_0.jpg" }, { id: "b", name: "X_0.jpg" },                           // mesmo nome, nenhuma usada: fica a mais antiga
+    { id: "c", name: "Y_0.jpg" }, { id: "d", name: "Y_0.jpg" }, { id: "e", name: "Y_0.jpg" }, // a usada fica
+    { id: "f", name: "Z_0.jpg", appProperties: { hash: "h1" } }, { id: "g", name: "W_3.jpg", appProperties: { hash: "h1" } }, // mesmo conteúdo
+    { id: "h", name: "Q_0.jpg" },                                                           // única
+  ];
+  assert.deepEqual(escolherRepetidas(arqs, new Set(["d", "g"])).sort(), ["b", "c", "e", "f"]);
+  assert.equal(await hashDe(new Blob(["abc"])), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
+
 await teste("Resumo: refaz nos registros antigos sem marcar como edição", async () => {
   const b1 = await db.laudo("B1");
   const c = recalculo({ ...b1, resumoVersao: 0 });

@@ -38,7 +38,11 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
   parou no meio e o Drive ficou só com imagens, sem nenhum `laudos-*.json.gz`, e o celular não recebeu nada): agora vai
   **primeiro o texto de todos os meses**, depois as imagens **4 laudos em paralelo**, regravando os meses a cada 20 laudos;
   cada imagem enviada é anotada na hora (se parar, continua de onde parou). Durante a sincronização a tela não dorme
-  (Wake Lock). As imagens duplicadas da 1ª tentativa ficam soltas na pasta "imagens" (inofensivas).
+  (Wake Lock).
+- **Nada repetido no Drive** (pedido do Artur): cada imagem leva o hash SHA-256 (`appProperties.hash`); antes de enviar, o app
+  procura uma igual (mesmo hash, ou mesmo nome `acesso_i` das antigas) e reaproveita. As cópias repetidas da 1ª tentativa
+  são apagadas uma vez (`limparRepetidas`, `meta.limpezaImagens`), só no PC que envia as imagens e depois de enviar tudo;
+  nunca apaga uma imagem que algum laudo usa (`escolherRepetidas` em `lib/drive.js`). Laudo nunca repete (chave = acesso).
 - **Celular**: o texto de todos os laudos fica no aparelho (busca offline); as imagens baixam do Drive ao abrir o laudo e
   ficam guardadas.
 - **Login Google**: token de 1 h, sem servidor (Google Identity Services). Depois de 1 h, o botão vira
@@ -56,7 +60,7 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
 | `lib/ponte.js` | conversa com a extensão (`window.postMessage` ↔ `ponte.js` da extensão ↔ `ponte()` no background dela) |
 | `config.js` | **`clienteId`** do OAuth (já preenchido) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (abre offline; instalar pelo Chrome › "Adicionar à tela inicial") |
-| `ferramentas/testes.mjs` | 13 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
+| `ferramentas/testes.mjs` | 14 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
 | `ferramentas/servidor.mjs` | servidor local `http://localhost:8765` (a extensão também conversa com essa origem) |
 | `ferramentas/gerar_icones.mjs` | gera os ícones |
 Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs` (ids das imagens no Drive), `mudadoEm`, `apagado`.
