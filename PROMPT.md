@@ -56,7 +56,7 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
 | `ferramentas/gerar_icones.mjs` | gera os ícones |
 Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs` (ids das imagens no Drive), `mudadoEm`, `apagado`.
 
-## 5. Criar o ID OAuth (uma vez, grátis) — PENDENTE
+## 5. Criar o ID OAuth (uma vez, grátis) — FEITO em 16/10/2026 (refazer só se perder o projeto)
 1. https://console.cloud.google.com › criar projeto "Banco de laudos" (o mesmo projeto pode servir ao app-calorias).
 2. APIs e serviços › Biblioteca › **Google Drive API** › Ativar.
 3. Tela de permissão OAuth (Google Auth Platform): tipo **Externo**, nome "Banco de laudos", e-mail do Artur; escopo
@@ -70,7 +70,7 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
 5. Copiar o **ID do cliente** (termina em `.apps.googleusercontent.com`) e mandar na conversa → vai para `config.js`.
 
 ## 6. Pendências
-1. ID OAuth (seção 5) → colocar em `config.js`, publicar, testar: PC com a extensão (abrir o app, ⚙ › Conectar, ⇅) e
+1. ID OAuth criado em 16/10 (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", já em `config.js`). Falta testar: PC com a extensão (abrir o app, ⚙ › Conectar, ⇅) e
    depois o celular (abrir o link no Chrome, Conectar, "Adicionar à tela inicial").
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
 3. Melhorias de filtro (o Artur quer a melhor filtragem possível).
