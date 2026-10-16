@@ -1,0 +1,7 @@
+{
+  "name": "banco-laudos",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node ferramentas/testes.mjs", "dev": "node ferramentas/servidor.mjs" },
+  "devDependencies": { "fake-indexeddb": "^6.0.0" }
+}
