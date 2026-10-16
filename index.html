@@ -46,12 +46,12 @@
   .l2{display:flex;gap:6px;margin:8px auto 0;max-width:1280px}
   .l2 input{background:var(--topo-campo);color:var(--topo-campo-texto);border-color:transparent;font-size:15px}
   .l2 select{width:auto;max-width:120px;background:var(--topo-campo);color:var(--topo-campo-texto);border-color:transparent}
-  .l3{display:flex;gap:6px;margin:8px auto 0;max-width:1280px;overflow-x:auto;scrollbar-width:none;align-items:center}
+  .l3{display:flex;flex-wrap:wrap;gap:6px;margin:8px auto 0;max-width:1280px;align-items:center}
   .l3::-webkit-scrollbar{display:none}
   .pilula{border:1px solid rgba(255,255,255,.35);background:transparent;color:var(--topo-texto);border-radius:999px;padding:4px 11px;font-size:12.5px}
   [data-tema="escuro"] .pilula{border-color:var(--borda2)}
-  body.filtros #bFiltros,.pilula.on{background:var(--topo-texto);color:var(--topo);border-color:var(--topo-texto)}
-  [data-tema="escuro"] body.filtros #bFiltros,.pilula.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
+  .pilula.on{background:var(--topo-texto);color:var(--topo);border-color:var(--topo-texto)}
+  [data-tema="escuro"] .pilula.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
   .l3 select{width:auto;padding:4px 8px;font-size:12.5px;border-radius:999px;background:transparent;color:var(--topo-texto);border-color:rgba(255,255,255,.35)}
   .l3 select option{color:#202124}
   #aviso{max-width:1280px;margin:6px auto 0;font-size:12.5px;color:var(--topo-suave);min-height:0}
@@ -59,9 +59,16 @@
   #aviso b{color:var(--topo-texto)}
   /* corpo */
   #corpo{max-width:1280px;margin:0 auto;padding:14px 14px 90px}
-  #facetas{display:none;background:var(--cartao);border:1px solid var(--borda);border-radius:12px;padding:12px 14px 4px;margin-bottom:12px;font-size:13px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 18px}
-  body.filtros #facetas{display:grid}
-  #bLimparTudo{grid-column:1/-1;justify-self:start;width:auto;margin-bottom:10px}
+  /* filtros: tudo na barra verde; cada grupo é um botão que abre as opções (igual no PC e no celular) */
+  #facetas{display:contents}
+  .dd{position:relative}
+  .dd>.pilula::after{content:" ▾";font-size:10px;opacity:.8}
+  .pop{display:none;position:fixed;z-index:20;background:var(--cartao);color:var(--texto);border:1px solid var(--borda2);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.28);padding:10px 12px;width:min(380px,calc(100vw - 16px));max-height:60vh;overflow:auto;font-size:13px;white-space:normal}
+  .dd.aberto .pop{display:block}
+  .pop .busca{margin-bottom:8px;padding:6px 8px;font-size:13px}
+  .pop .rodape{display:flex;gap:6px;margin-top:10px;justify-content:flex-end}
+  .pop .rodape button{padding:4px 10px;font-size:12.5px}
+  #bLimparTudo{border-style:dashed}
   .grupo{margin-bottom:14px}
   .grupo h3{margin:0 0 6px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--suave);font-weight:600;display:flex;justify-content:space-between}
   .chips{display:flex;flex-wrap:wrap;gap:5px}
@@ -185,7 +192,6 @@
     <select id="onde" title="Onde buscar"><option value="tudo">Tudo</option><option value="conclusao">Conclusão</option><option value="achados">Achados</option><option value="indicacao">Indicação</option></select>
   </div>
   <div class="l3">
-    <button class="pilula" id="bFiltros">Filtros</button>
     <button class="pilula" data-periodo="" title="Todo o período">Tudo</button>
     <button class="pilula" data-periodo="hoje" title="Hoje">Hoje</button>
     <button class="pilula" data-periodo="3d" title="Últimos 3 dias">3d</button>
@@ -194,6 +200,7 @@
     <button class="pilula" data-periodo="3m" title="Últimos 3 meses">3m</button>
     <button class="pilula" data-periodo="12m" title="Últimos 12 meses">12m</button>
     <button class="pilula" id="pFav" title="Só favoritos">★</button>
+    <span id="facetas"></span>
     <select id="ordem" title="Ordenar"><option value="recente">Mais recentes</option><option value="antigo">Mais antigos</option><option value="relevancia">Relevância</option></select>
   </div>
   <div id="aviso"></div>
@@ -201,7 +208,6 @@
 
 <div id="corpo">
   <main>
-    <section id="facetas"></section>
     <div id="faixa"></div>
     <section id="lista"><div class="vazio">Carregando…</div></section>
   </main>

@@ -2,8 +2,8 @@
 
 > Cole este texto numa conversa nova do Claude Code e diga o que quer mudar. Ele substitui a memória da conversa anterior.
 > Este arquivo é atualizado a cada mudança (pedido do Artur: poder dar /clear e continuar daqui).
-> **Onde paramos (16/10/2026, fim do dia, Artur trocando de computador):** v2.1 publicada (seção 8) e testada só com laudos
-> de exemplo; **falta o teste de uso com os laudos reais** (seção 9). Extensão na **v1.12.0** (ponte + Notion desligável).
+> **Onde paramos (16/10/2026, noite):** v2.2 publicada (seção 10). **Falta conferir na tela** os filtros novos (botões na barra
+> verde) no PC e no celular e o destaque aprendido com os laudos reais (seção 9). Extensão na **v1.12.2**.
 
 ## 0. Para continuar em outro computador
 1. Pedir ao Claude Code: "leia o PROMPT.md do repositório arturaragao/banco-laudos e o extensao-laudos-vue/PROMPT.md do
@@ -148,6 +148,24 @@ Arquivos novos: `lib/indice.js` (índice, facetas, ordem, destaque, parecidos, e
   classificações mais raros do banco + gravidade (neoplasia, TEP, aneurisma, RADS alto...) + nº de itens alterados.
   Normais no fim. Testes: 21.
 
+## 10. v2.2 (16/10/2026, noite): pedidos do Artur
+- **Destaque aprendido** (`lib/aprendizado.js`): laudo com negrito feito à mão = `destaqueManual` OU editado (`conteudoEditadoEm`) com
+  o negrito da conclusão diferente do automático da extensão (`destacarConclusao`). Esses ficam como ele deixou, e deles sai
+  `sempre` (trechos que ele destacou e o app não) e `nunca` (palavras que ele tirou mais vezes do que destacou), aplicados
+  a todos os outros (`definirAprendizado` em `lib/destaque.js`). ⚙ Configurações mostra o que foi aprendido. **Ao mexer nas
+  regras do destaque: olhar antes os laudos feitos à mão (são o gabarito).**
+  Causa achada: os 3 laudos que ele editou no Notion perdiam a marca — a extensão (1.12.2) agora marca `destaqueManual` em
+  `edicoesDoNotion` quando o negrito difere do automático (`negritoAMao`).
+- **Filtros na barra verde**: cada grupo (Modalidade, Exame, Médico, Classificações, Coleções, Laudos, Datas, Buscas salvas) é
+  um botão que abre as opções por cima (`.dd/.pop`, com campo Procurar quando há mais de 10); "✕ Limpar (n)" quando há filtro.
+  Igual no PC e no celular (linha quebra, nada escondido). Saíram o botão "Filtros" e a alça de altura.
+- **Médicos**: sem "(DR)/(DRA)/(DR. )" e na ordem certa: "SIMEÃO PEDRO, MONICA" -> "Monica Simeão Pedro" (`nomeMedico`).
+- **Modalidade**: título primeiro (TC/RM/ANGIOTOMOGRAFIA/RNM/URO-TC...), depois a do portal (TC/RM antes das outras), depois
+  o texto do laudo. Com os 656 laudos reais deu TC 380 · RM 274 · Outros 2 ("OUTROS LAUDOS" = complementos). Se o Artur
+  ainda vir TC/RM faltando, pedir para recarregar (Ctrl+Shift+R) e dizer em qual aparelho. Testes: 24.
+
 ## 9. Pendências
-1. Teste de uso da v2.1 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
+0. **Conferir a v2.2 na tela** (PC e celular): botões de filtro na barra verde abrem/fecham e se posicionam bem; ⚙ mostra o
+   destaque aprendido; os 3 laudos editados no Notion (568779247, 855830755, 855857399) ficam com o negrito dele.
+1. Teste de uso da v2.1/v2.2 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.

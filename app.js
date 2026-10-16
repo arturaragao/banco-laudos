@@ -9,7 +9,9 @@ import * as drive from "./lib/drive.js";
 import { comExtensao, procurarExtensao, extensao } from "./lib/ponte.js";
 import { camposDaEdicao, recalculo } from "./lib/regras.js";
 import { indexar, padronizar, filtrar, ordenar, termosPositivos, marcar, parecidos, estatisticas } from "./lib/indice.js";
-import { destacar } from "./lib/destaque.js";
+import { normalizar } from "./lib/filtros.js";
+import { destacar, definirAprendizado } from "./lib/destaque.js";
+import { feitoAMao, aprender } from "./lib/aprendizado.js";
 import { vocabulario, corrigir } from "./lib/aproximada.js";
 import { abreviarTitulo, separarLinhas, textoDoParagrafo } from "./lib/laudo2notion.js";
 import { dividirLaudo, resumoLaudo, itensConclusao, cabecalho } from "./lib/secoes.js";
@@ -37,14 +39,19 @@ let achados = [];                           // ix da busca atual
 let mostrando = 0, termos = [], consultaUsada = "";
 let vocab = null;
 let P = prefs.vazio();
-const abertos = new Set();                  // grupos de facetas expandidos
+let ddAberto = "", ddBusca = "";          // botão de filtro aberto e o texto digitado dentro dele
 const urls = [];
 
 // ---------- carregar ----------
+// destaque da conclusão aprendido com os negritos feitos à mão (lib/aprendizado.js)
+let aprendido = { sempre: [], nunca: [], laudos: 0 };
+function reaprender(regs = todos.map((ix) => ix.r)) { aprendido = aprender(regs); definirAprendizado(aprendido); }
+const aMao = (r) => (r.__mao ??= feitoAMao(r));
 async function carregar() {
   const regs = [];
   await db.percorrer((r) => { regs.push(r); });
   todos = padronizar(regs.map(indexar));
+  reaprender(regs);
   vocab = null;
   P = await prefs.ler();
   $("historico").innerHTML = Object.entries(P.historico).sort((a, b) => b[1].em - a[1].em).map(([t]) => `<option value="${esc(t)}">`).join("");
@@ -113,30 +120,53 @@ function desenharTopo() {
   document.querySelectorAll("[data-periodo]").forEach((b) => b.classList.toggle("on", b.dataset.periodo === F.periodo || (b.dataset.periodo === "" && !F.periodo)));
   $("pFav").classList.toggle("on", !!F.fav);
   const n = GRUPOS.reduce((s, g) => s + (F.facetas[g]?.length || 0), 0) + (F.normal ? 1 : 0) + (F.periodo === "datas" ? 1 : 0);
-  $("bFiltros").textContent = n ? `Filtros (${n})` : "Filtros";
-  $("bFiltros").classList.toggle("on", n > 0);
 }
 
 const NOMES = { mod: "Modalidade", exame: "Exame", medico: "Médico", classe: "Classificações", achado: "Achados", colecao: "Coleções" };
+// Filtros na barra verde: cada grupo é um botão ("Exame (2) ▾") que abre as opções por cima da lista. Igual no PC e no celular.
 function desenharFacetas(cont) {
+  const dd = (k, rotulo, n, corpo) => `<span class="dd ${ddAberto === k ? "aberto" : ""}"><button class="pilula ${n ? "on" : ""}" data-dd="${k}">${rotulo}${n ? ` (${n})` : ""}</button><div class="pop">${corpo}</div></span>`;
   const chips = (g) => {
     const sel = F.facetas[g] || [];
     const itens = [...cont[g]];
     for (const v of sel) if (!itens.some(([x]) => x === v)) itens.unshift([v, 0]);
     if (!itens.length) return "";
-    const lim = abertos.has(g) ? itens.length : 8;
-    return `<div class="grupo"><h3>${NOMES[g]}${itens.length > 8 ? `<button class="mais" data-expandir="${g}">${abertos.has(g) ? "menos" : `todos (${itens.length})`}</button>` : ""}</h3>
-      <div class="chips">${itens.slice(0, lim).map(([v, n]) => `<button class="chip ${sel.includes(v) ? "on" : ""}" data-g="${g}" data-v="${esc(v)}"><span class="nome">${esc(v)}</span><span>${n}</span></button>`).join("")}</div></div>`;
+    const busca = itens.length > 10 ? `<input class="busca" data-filtrardd placeholder="Procurar ${NOMES[g].toLowerCase()}..." value="${esc(ddAberto === g ? ddBusca : "")}">` : "";
+    const q = ddAberto === g ? normalizar(ddBusca) : "";
+    const lista = itens.map(([v, n]) => `<button class="chip ${sel.includes(v) ? "on" : ""}" data-g="${g}" data-v="${esc(v)}" ${q && !normalizar(v).includes(q) ? "hidden" : ""}><span class="nome">${esc(v)}</span><span>${n}</span></button>`).join("");
+    const limpar = sel.length ? `<div class="rodape"><button data-limpargrupo="${g}">Limpar</button></div>` : "";
+    return dd(g, NOMES[g], sel.length, `${busca}<div class="chips">${lista}</div>${limpar}`);
   };
   const salvas = prefs.ativos(P, "buscas");
-  $("facetas").innerHTML = `
-    <div class="grupo"><h3>Buscas salvas <button class="mais" id="bSalvarBusca">★ salvar a atual</button></h3>
-      <div class="chips">${salvas.length ? salvas.map(([n]) => `<button class="chip" data-busca="${esc(n)}"><span class="nome">${esc(n)}</span><span data-apagarbusca="${esc(n)}" title="Apagar">✕</span></button>`).join("") : '<small style="color:var(--suave)">Nenhuma ainda.</small>'}</div></div>
-    <div class="grupo"><h3>Datas</h3><div class="datas"><input type="date" id="fDe" value="${F.periodo === "datas" ? esc(F.de) : ""}" title="De"><input type="date" id="fAte" value="${F.periodo === "datas" ? esc(F.ate) : ""}" title="Até"></div></div>
-    <div class="grupo"><h3>Laudos</h3><select id="fNormal"><option value="">todos</option><option value="alt" ${F.normal === "alt" ? "selected" : ""}>só com alteração</option><option value="normal" ${F.normal === "normal" ? "selected" : ""}>só 100% normais</option></select></div>
-    ${GRUPOS.map(chips).join("")}
-    <button id="bLimparTudo">Limpar todos os filtros</button>`;
+  const nDatas = F.periodo === "datas" ? 1 : 0;
+  const total = GRUPOS.reduce((s, g) => s + (F.facetas[g]?.length || 0), 0) + (F.normal ? 1 : 0) + nDatas;
+  $("facetas").innerHTML = [
+    ...GRUPOS.map(chips),
+    dd("laudos", "Laudos", F.normal ? 1 : 0, `<select id="fNormal"><option value="">todos</option><option value="alt" ${F.normal === "alt" ? "selected" : ""}>só com alteração</option><option value="normal" ${F.normal === "normal" ? "selected" : ""}>só 100% normais</option></select>`),
+    dd("datas", "Datas", nDatas, `<div class="datas"><input type="date" id="fDe" value="${F.periodo === "datas" ? esc(F.de) : ""}" title="De"><input type="date" id="fAte" value="${F.periodo === "datas" ? esc(F.ate) : ""}" title="Até"></div>`),
+    dd("buscas", "Buscas salvas", 0, `<div class="chips">${salvas.length ? salvas.map(([n]) => `<button class="chip" data-busca="${esc(n)}"><span class="nome">${esc(n)}</span><span data-apagarbusca="${esc(n)}" title="Apagar">✕</span></button>`).join("") : '<small style="color:var(--suave)">Nenhuma ainda.</small>'}</div><div class="rodape"><button id="bSalvarBusca">★ Salvar a busca atual</button></div>`),
+    total ? `<button class="pilula" id="bLimparTudo">✕ Limpar (${total})</button>` : "",
+  ].join("");
+  posicionarPop();
 }
+// a caixa de opções abre logo abaixo do botão, sem sair da tela
+function posicionarPop() {
+  const d = document.querySelector(".dd.aberto");
+  if (!d) return;
+  const b = d.querySelector(".pilula").getBoundingClientRect(), pop = d.querySelector(".pop");
+  pop.style.top = `${Math.round(b.bottom + 6)}px`;
+  pop.style.left = `${Math.round(Math.max(8, Math.min(b.left, innerWidth - pop.offsetWidth - 8)))}px`;
+}
+function abrirDD(k) {
+  ddAberto = ddAberto === k ? "" : k;
+  ddBusca = "";
+  buscar();
+  if (ddAberto && innerWidth >= 1000) document.querySelector(".dd.aberto [data-filtrardd]")?.focus();
+}
+addEventListener("resize", posicionarPop);
+addEventListener("scroll", posicionarPop, { passive: true });
+// clique fora fecha
+document.addEventListener("click", (e) => { if (ddAberto && e.target.isConnected && !e.target.closest(".dd")) { ddAberto = ""; buscar(); } });
 
 function desenharFaixa() {
   const partes = [];
@@ -168,7 +198,7 @@ const htmlPar = (p, marca = true) => p.map(({ t, b, i, u }) => {
   return x;
 }).join("");
 // conclusão: formatação à mão (destaqueManual) ou o destaque novo do app (lib/destaque.js: só o achado principal)
-const fmtConc = (r, p, marca) => htmlPar(r.destaqueManual ? semNum(p) : destacar(semNum(p)), marca);
+const fmtConc = (r, p, marca) => htmlPar(aMao(r) ? semNum(p) : destacar(semNum(p)), marca);
 const nImgs = (r) => Math.max(r.nImagens || 0, r.imgs?.length || 0, r.imgsLocais || 0);
 
 function cartao(ix) {
@@ -392,7 +422,7 @@ $("lista").addEventListener("focusout", async (e) => {
   let pars = r.pars || [], resumo = r.resumoManual ? r.resumo : "";
   if (el.dataset.campo === "resumo") resumo = el.textContent.trim();
   else pars = trocarConclusao(r, lerEditado(Object.assign(document.createElement("div"), { innerHTML: `<ol>${el.innerHTML}</ol>` })));
-  await salvarEdicao(r, pars, resumo, el.dataset.campo === "conc" || !!r.destaqueManual);
+  await salvarEdicao(r, pars, resumo, el.dataset.campo === "conc" || aMao(r));
   msg(`Acesso ${r.acc} salvo`);
   item.querySelector(".aberto").innerHTML = "";
 });
@@ -403,6 +433,7 @@ async function salvarEdicao(r, pars, resumo, destaqueManual = true) {
   await db.atualizar(r.acc, camposDaEdicao(atual, pars, resumo, destaqueManual));
   vocab = null;
   const novo = await atualizarIx(r.acc);
+  reaprender();
   agendarSincronia();
   return novo;
 }
@@ -471,7 +502,7 @@ async function salvar(item, r) {
   const pars = lerEditado(box.querySelector(".laudo"));
   if (!pars.length) return msg("O laudo ficou vazio — nada foi salvo");
   const resumo = box.querySelector(".edResumo")?.value || "";
-  await salvarEdicao(r, pars, resumo, !!r.destaqueManual);
+  await salvarEdicao(r, pars, resumo, aMao(r));
   const novo = redesenhar(item);
   if (novo) abrir(novo, true);
   msg("Laudo salvo");
@@ -491,9 +522,11 @@ $("facetas").addEventListener("click", async (e) => {
   if (b) { const s = P.buscas[b.dataset.busca]; if (s) { F = { ...PADRAO, ...s.f }; vista = "laudos"; buscar(); } return; }
   const c = e.target.closest(".chip[data-g]");
   if (c) return ligarFaceta(c.dataset.g, c.dataset.v);
-  const x = e.target.closest("[data-expandir]");
-  if (x) { abertos.has(x.dataset.expandir) ? abertos.delete(x.dataset.expandir) : abertos.add(x.dataset.expandir); return buscar(); }
-  if (e.target.id === "bLimparTudo") { F = { ...PADRAO, ordem: F.ordem }; return buscar(); }
+  const d = e.target.closest("[data-dd]");
+  if (d) return abrirDD(d.dataset.dd);
+  const lg = e.target.closest("[data-limpargrupo]");
+  if (lg) { F.facetas[lg.dataset.limpargrupo] = []; return buscar(); }
+  if (e.target.id === "bLimparTudo") { F = { ...PADRAO, ordem: F.ordem }; ddAberto = ""; return buscar(); }
   if (e.target.id === "bSalvarBusca") {
     const nome = prompt("Nome desta busca:", F.q || "Minha busca");
     if (!nome?.trim()) return;
@@ -502,6 +535,13 @@ $("facetas").addEventListener("click", async (e) => {
     buscar();
     msg(`Busca "${nome.trim()}" salva`);
   }
+});
+// procurar dentro da lista de opções (Exame, Médico...) sem redesenhar
+$("facetas").addEventListener("input", (e) => {
+  if (!e.target.matches("[data-filtrardd]")) return;
+  ddBusca = e.target.value;
+  const q = normalizar(ddBusca);
+  e.target.closest(".pop").querySelectorAll(".chip").forEach((c) => { c.hidden = !!q && !normalizar(c.dataset.v).includes(q); });
 });
 $("facetas").addEventListener("change", (e) => {
   if (e.target.id === "fNormal") { F.normal = e.target.value; buscar(); }
@@ -517,9 +557,6 @@ $("onde").addEventListener("change", () => { F.onde = $("onde").value; buscar();
 $("ordem").addEventListener("change", () => { F.ordem = $("ordem").value; buscar(); });
 document.querySelectorAll("[data-periodo]").forEach((b) => b.addEventListener("click", () => { F.periodo = b.dataset.periodo; F.de = F.ate = ""; buscar(); }));
 $("pFav").addEventListener("click", () => { F.fav = !F.fav; buscar(); });
-// filtros em cima da lista (abre/fecha; no PC começa aberto)
-if (lerLocal("app.filtrosAbertos", innerWidth >= 1000)) document.body.classList.add("filtros");
-$("bFiltros").addEventListener("click", () => gravarLocal("app.filtrosAbertos", document.body.classList.toggle("filtros")));
 $("faixa").addEventListener("click", async (e) => {
   const a = e.target.dataset.faixa;
   if (a === "sairLixeira") { vista = "laudos"; buscar(); }
@@ -783,6 +820,8 @@ async function abrirConfig() {
     `<b>Última sincronização:</b> ${meta.ultima ? new Date(meta.ultima).toLocaleString("pt-BR") : "nunca"}`,
     `<b>Laudos aqui:</b> ${total}${pend ? ` · ${pend} para enviar` : ""}`,
     `<b>Extensão Copiar Laudos Vue:</b> ${extensao() ? `encontrada (v${extensao()})` : "não está neste navegador"}`,
+    `<b>Destaque aprendido</b> com ${aprendido.laudos} laudo(s) de negrito feito à mão: ${aprendido.sempre.length} trecho(s) sempre destacados, ${aprendido.nunca.length} palavra(s) nunca` +
+      (aprendido.laudos ? `<details><summary>ver</summary><small><b>Sempre:</b> ${esc(aprendido.sempre.join(" · ") || "—")}<br><b>Nunca:</b> ${esc(aprendido.nunca.join(" · ") || "—")}</small></details>` : ""),
     espaco,
   ].filter(Boolean).join("<br>");
   $("dOpcoes").showModal();

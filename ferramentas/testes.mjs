@@ -345,4 +345,50 @@ await teste("Resumo: refaz nos registros antigos sem marcar como edição", asyn
   assert.equal(recalculo(b1), null);
 });
 
+await teste("Médico sem o (DR)/(DRA) do portal", async () => {
+  const { nomeMedico } = await import("../lib/nomes.js");
+  assert.equal(nomeMedico("MEES, ANDRES (DR)"), "Andres Mees");
+  assert.equal(nomeMedico("MULLER, RENATA (DRA)"), "Renata Muller");
+  assert.equal(nomeMedico("CAMARGO, LUIS FERNANDO SCHNEIDER (DR. )"), "Luis Fernando Schneider Camargo");
+  assert.equal(nomeMedico("SIMEÃO PEDRO, MONICA"), "Monica Simeão Pedro");
+});
+
+await teste("Modalidade: TC e RM com todos os formatos do portal e dos títulos", async () => {
+  const { modalidade } = await import("../lib/indice.js");
+  for (const [mod, titulo, m] of [["CT OT", "TC DE TÓRAX", "TC"], ["MR OT", "RM DO OMBRO", "RM"], ["CT", "TC COLUNA LOMBAR-LOMBO SACRA", "TC"],
+    ["", "ANGIOTOMOGRAFIA DE TÓRAX", "TC"], ["", "ANGIO-RESSONÂNCIA DO ENCÉFALO", "RM"], ["", "RNM JOELHO", "RM"], ["OT", "URO-TC", "TC"],
+    ["XA\\CT", "CORONÁRIAS", "TC"], ["SR\\MR", "", "RM"], ["MR", "RM DA COLUNA TORÁCICA SEM CONTRASTE", "RM"]]) assert.equal(modalidade({ mod, titulo }), m, titulo);
+  assert.equal(modalidade({ mod: "", titulo: "OUTROS LAUDOS", texto: "Sequências ponderadas em T1 e T2. Comparado a tomografia prévia." }), "RM");
+  assert.equal(modalidade({ mod: "", titulo: "OUTROS LAUDOS", texto: "Exame realizado em tomógrafo multidetectores." }), "TC");
+});
+
+await teste("Destaque aprendido com o negrito mudado à mão (formato real do Notion)", async () => {
+  const { feitoAMao, aprender } = await import("../lib/aprendizado.js");
+  const { destacar, definirAprendizado } = await import("../lib/destaque.js");
+  const fmt = (p) => p.map((x) => (x.b ? "**" + x.t + "**" : x.t)).join("");
+  // conclusão como veio do Notion (acesso 568779247, editado lá em 16/10/2026)
+  const conc = [
+    [{ t: "1. Manifestações de " }, { t: "tendinose ", b: true, u: true }, { t: "grande parte dos tendões componentes do " }, { t: "manguito rotador", b: true, u: true },
+      { t: " com " }, { t: "pequena rotura", b: true, u: true }, { t: " de espessura parcial / intra-substancial no supra-espinhal." }],
+    [{ t: "2. Sinais de " }, { t: "bursite subacrômio-deltoidiana leve", b: true, u: true }, { t: "." }],
+  ];
+  const r = { acc: "568779247", conteudoEditadoEm: Date.parse("2026-10-16T20:28:00Z"), pars: [[{ t: "RM DO OMBRO", b: true }], [{ t: "CONCLUSÃO:", b: true }], ...conc] };
+  assert.equal(feitoAMao(r), true);
+  assert.equal(feitoAMao({ ...r, conteudoEditadoEm: 0 }), false);       // nunca editado: negrito é o automático/antigo
+  assert.equal(feitoAMao({ ...r, conteudoEditadoEm: 0, destaqueManual: true }), true);
+  const apr = aprender([r, { acc: "x", apagado: true }]);
+  assert.equal(apr.laudos, 1);
+  assert.ok(apr.sempre.includes("manguito rotador") && apr.sempre.includes("pequena rotura"), apr.sempre.join(" · "));
+  assert.ok(apr.nunca.includes("parcial") && apr.nunca.includes("tendoes"), apr.nunca.join(" · "));
+  assert.ok(!apr.nunca.includes("tendinose"));
+  // outro laudo (sem negrito à mão): o destaque segue o que ele fez
+  const p = [{ t: "Tendinose do supraespinal e do manguito rotador com rotura de espessura parcial." }];
+  const antes = fmt(destacar(p));
+  definirAprendizado(apr);
+  const depois = fmt(destacar(p));
+  definirAprendizado(null);
+  assert.ok(!antes.includes("**manguito rotador**"), antes);
+  assert.ok(depois.includes("**manguito rotador**") && !/parcial\*\*/.test(depois) && depois.includes("**Tendinose"), depois);
+});
+
 console.log(`\n${ok} testes passaram`);
