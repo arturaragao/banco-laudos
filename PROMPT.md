@@ -1,7 +1,20 @@
-# Prompt — App "Banco de laudos" · estado em 16/10/2026 (v1)
+# Prompt — App "Banco de laudos" · estado em 16/10/2026 (v2.1)
 
 > Cole este texto numa conversa nova do Claude Code e diga o que quer mudar. Ele substitui a memória da conversa anterior.
 > Este arquivo é atualizado a cada mudança (pedido do Artur: poder dar /clear e continuar daqui).
+> **Onde paramos (16/10/2026, fim do dia, Artur trocando de computador):** v2.1 publicada (seção 8) e testada só com laudos
+> de exemplo; **falta o teste de uso com os laudos reais** (seção 9). Extensão na **v1.12.0** (ponte + Notion desligável).
+
+## 0. Para continuar em outro computador
+1. Pedir ao Claude Code: "leia o PROMPT.md do repositório arturaragao/banco-laudos e o extensao-laudos-vue/PROMPT.md do
+   arturaragao/Artur- e vamos continuar". Precisa de Git + `gh` logado (`gh auth login`) e Node.js.
+2. Clonar: `gh repo clone arturaragao/banco-laudos` (público) e `gh repo clone arturaragao/Artur-` (privado; branch padrão
+   `claude/vigilant-pasteur-abqqee`). No banco-laudos: `npm i` e `npm test` (21 testes) · `npm run dev` = http://localhost:8765
+   (a extensão também conversa com essa origem).
+3. Publicar = `git push` na `main` do banco-laudos (GitHub Pages atualiza em ~1 min; o service worker busca a versão nova —
+   subir `CACHE` no `sw.js` a cada publicação). Extensão = PR + merge automático na branch padrão do Artur- e subir `version`.
+4. Usar o app (qualquer aparelho): https://arturaragao.github.io/banco-laudos/ › ☁ Conectar (conta Google do Drive dele).
+   Num PC novo com a extensão: instalar a extensão como diz o PROMPT.md dela, abrir o app e ⇅ (traz os laudos da extensão).
 
 ## 1. O que é
 App web (PWA) do Artur (radiologista) com o **banco de laudos** da extensão **Copiar Laudos Vue** (repo privado
