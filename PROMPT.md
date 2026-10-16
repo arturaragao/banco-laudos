@@ -70,7 +70,8 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
 5. Copiar o **ID do cliente** (termina em `.apps.googleusercontent.com`) e mandar na conversa → vai para `config.js`.
 
 ## 6. Pendências
-1. ID OAuth criado em 16/10 (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", já em `config.js`). Falta testar: PC com a extensão (abrir o app, ⚙ › Conectar, ⇅) e
-   depois o celular (abrir o link no Chrome, Conectar, "Adicionar à tela inicial").
+1. ✅ 16/10/2026: ID OAuth criado (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", em `config.js`) e
+   **sincronização funcionando no celular** (PC com a extensão → Drive → celular). Se o navegador mostrar "falta o ID",
+   é cópia antiga em cache: Ctrl+Shift+R (o sw.js agora sempre revalida com `cache: "no-cache"`).
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
 3. Melhorias de filtro (o Artur quer a melhor filtragem possível).
