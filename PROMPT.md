@@ -83,3 +83,20 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
    depois o celular (abrir o link no Chrome, Conectar, "Adicionar à tela inicial").
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
 3. Melhorias de filtro (o Artur quer a melhor filtragem possível).
+
+## 7. Em escolha (16/10/2026): layout novo + filtros e funções
+**5 layouts mostrados** (mockups de celular; o PC se adapta): 1 Clínico refinado (o atual, verde, mais limpo) ·
+2 Estação PACS (escuro, lista densa, monospace) · 3 Editorial (serif, leitura de revista) · 4 Facetas com contagens
+(chips "TC 31 · Lung-RADS 4", mini-gráfico por mês, etiquetas coloridas de achados) · 5 Material/Google (busca arredondada,
+abas TC/RM/US, botão flutuante). Recomendação: **4 (Facetas)**, com o tema escuro do 2 como opção.
+**Sugestões de filtros** (todas sem tokens): facetas clicáveis com contagem (modalidade, exame/região, médico, período,
+normal/alterado, com imagem); classificações extraídas por regra (BI-RADS, TI-RADS, LI-RADS, PI-RADS, Lung-RADS, Bosniak,
+Fleischner, O-RADS); etiquetas de achado clicáveis; buscar só em conclusão/achados/indicação; medidas ("nódulo > 8 mm");
+tolerância a erro de digitação; ordenar por data/relevância; períodos rápidos (7 d, 30 d, 12 m); filtros salvos sincronizados;
+histórico de buscas.
+**Sugestões de funções**: termos buscados destacados no laudo; favoritos e coleções ("ensino", "revisar") + nota pessoal por
+laudo (sincronizadas); visualizador de imagens em tela cheia com pinça e deslizar; laudos parecidos (mesmas etiquetas);
+estatísticas (por mês, por médico, achados mais comuns); modo estudo/quiz (imagens primeiro, conclusão escondida);
+copiar trechos de conclusão como frases-modelo; exportar resultado (CSV/PDF); lixeira com desfazer (30 dias); atalhos de
+teclado no PC; tema claro/escuro manual.
+Aguardando o Artur escolher o layout e as funções.
