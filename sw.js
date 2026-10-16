@@ -1,8 +1,8 @@
 // Service worker: o app abre sem internet. Sempre tenta a versão nova primeiro (rede) e cai no cache se estiver offline.
 // Pedidos ao Google (Drive, login) não passam pelo cache.
-const CACHE = "banco-laudos-v5";
+const CACHE = "banco-laudos-v6";
 const ARQUIVOS = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png",
-  "lib/db.js", "lib/drive.js", "lib/nuvem.js", "lib/ponte.js", "lib/regras.js", "lib/filtros.js", "lib/secoes.js", "lib/laudo2notion.js"];
+  "ui/visor.js", "lib/indice.js", "lib/classificacoes.js", "lib/aproximada.js", "lib/prefs.js", "lib/db.js", "lib/drive.js", "lib/nuvem.js", "lib/ponte.js", "lib/regras.js", "lib/filtros.js", "lib/secoes.js", "lib/laudo2notion.js"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

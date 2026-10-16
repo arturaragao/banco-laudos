@@ -1,22 +1,150 @@
-// App Banco de laudos: a página Banco da extensão Copiar Laudos Vue, fora do Chrome do PC.
+// App Banco de laudos: a página Banco da extensão Copiar Laudos Vue, fora do Chrome do PC, com filtros por facetas.
 // Dados no IndexedDB deste aparelho, sincronizados com o Google Drive (nuvem.js + drive.js) e, nos PCs com a extensão,
-// com o banco dela (ponte.js). Busca com a mesma sintaxe dos filtros do painel; sem tokens de IA.
+// com o banco dela (ponte.js). Tudo por regras, sem tokens de IA.
 import CONFIG from "./config.js";
 import * as db from "./lib/db.js";
+import * as prefs from "./lib/prefs.js";
 import { sincronizar, imagemDe } from "./lib/nuvem.js";
 import * as drive from "./lib/drive.js";
 import { comExtensao, procurarExtensao, extensao } from "./lib/ponte.js";
 import { camposDaEdicao, recalculo } from "./lib/regras.js";
-import { confere, textoDoExame } from "./lib/filtros.js";
-import { medicoConfere, abreviarTitulo, separarLinhas, textoDoParagrafo } from "./lib/laudo2notion.js";
+import { indexar, filtrar, ordenar, termosPositivos, marcar, parecidos, estatisticas, GRUPOS } from "./lib/indice.js";
+import { vocabulario, corrigir } from "./lib/aproximada.js";
+import { abreviarTitulo, separarLinhas, textoDoParagrafo } from "./lib/laudo2notion.js";
 import { dividirLaudo, resumoLaudo, itensConclusao, destacarConclusao, cabecalho } from "./lib/secoes.js";
+import { abrirVisor, visorAberto, fecharVisor } from "./ui/visor.js";
 
+const $ = (id) => document.getElementById(id);
 const lerLocal = (k, p) => { try { return JSON.parse(localStorage.getItem(k)) ?? p; } catch { return p; } };
 const gravarLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const msg = (t) => { $("aviso").dataset.msg = t || ""; mostrarAviso(); };
+const DIA = 864e5, LIXEIRA_DIAS = 30, POR_PAGINA = 40;
 drive.configurar(lerLocal("app.clienteId", "") || CONFIG.clienteId);
 drive.prepararLogin();
 
-// registros antigos não têm resumo/conclusão numerada guardados: calcula na hora a partir do laudo
+// ---------- estado ----------
+const PADRAO = { q: "", onde: "tudo", periodo: "", de: "", ate: "", normal: "", fav: false, img: false, ordem: "recente", facetas: {} };
+let F = { ...PADRAO, ...lerLocal("banco.f", {}) };
+let vista = "laudos";                       // laudos | lixeira
+let estudo = lerLocal("app.estudo", false);
+let MOSTRAR_RESUMO = lerLocal("app.mostrarResumo", false);
+let todos = [];                             // ix de todos os laudos (sem lápides)
+let achados = [];                           // ix da busca atual
+let mostrando = 0, termos = [], consultaUsada = "";
+let vocab = null;
+let P = prefs.vazio();
+const abertos = new Set();                  // grupos de facetas expandidos
+const urls = [];
+
+// ---------- carregar ----------
+async function carregar() {
+  const regs = [];
+  await db.percorrer((r) => { regs.push(r); });
+  todos = regs.map(indexar);
+  vocab = null;
+  P = await prefs.ler();
+  $("historico").innerHTML = Object.entries(P.historico).sort((a, b) => b[1].em - a[1].em).map(([t]) => `<option value="${esc(t)}">`).join("");
+}
+
+function dataMenos(dias) { const d = new Date(Date.now() - dias * DIA); return d.toISOString().slice(0, 10); }
+function filtroEfetivo() {
+  const f = { ...F };
+  if (F.periodo === "7d") { f.de = dataMenos(6); f.ate = ""; }
+  else if (F.periodo === "30d") { f.de = dataMenos(29); f.ate = ""; }
+  else if (F.periodo === "12m") { f.de = dataMenos(365); f.ate = ""; }
+  else if (F.periodo !== "datas") { f.de = ""; f.ate = ""; }
+  return f;
+}
+
+// ---------- buscar ----------
+let tempoHist = null;
+async function buscar() {
+  gravarLocal("banco.f", F);
+  for (const u of urls.splice(0)) URL.revokeObjectURL(u);
+  const q = F.q.trim();
+  let trocas = [];
+  consultaUsada = q;
+  if (q && !/^\d{5,}$/.test(q)) {
+    vocab ||= vocabulario(todos.map((ix) => ix.tudo));
+    const c = corrigir(q, vocab);
+    if (c.trocas.length) { consultaUsada = c.expr; trocas = c.trocas; }
+  }
+  termos = /^\d{5,}$/.test(q) ? [] : termosPositivos(consultaUsada);
+  const base = todos.filter((ix) => (vista === "lixeira" ? ix.r.lixeiraEm : !ix.r.lixeiraEm));
+  const { lista, contagens } = filtrar(base, filtroEfetivo(), consultaUsada);
+  achados = ordenar(lista, F.ordem, consultaUsada);
+  $("aviso").dataset.troca = trocas.length ? `Busquei por <b>${esc(consultaUsada)}</b> (você digitou ${trocas.map(([a]) => `“${esc(a)}”`).join(", ")})` : "";
+  mostrarAviso();
+  desenharTopo();
+  desenharFacetas(contagens);
+  desenharFaixa();
+  const total = base.length;
+  $("contagem").textContent = vista === "lixeira" ? `lixeira: ${achados.length}` : `${achados.length} de ${total} laudo(s)`;
+  mostrando = 0;
+  $("lista").innerHTML = "";
+  if (!todos.length) {
+    $("lista").innerHTML = drive.conectado() || extensao()
+      ? '<div class="vazio">O banco ainda está vazio. Toque em <b>⇅ Sincronizar</b>.</div>'
+      : '<div class="vazio">O banco deste aparelho está vazio.<br>Toque em <b>☁ Conectar e sincronizar</b> para trazer os laudos do Google Drive.</div>';
+  } else if (!achados.length) {
+    $("lista").innerHTML = `<div class="vazio">${vista === "lixeira" ? "A lixeira está vazia." : "Nenhum laudo com esses filtros."}</div>`;
+  } else mostrarMais();
+  // histórico de buscas (vai para os outros aparelhos)
+  clearTimeout(tempoHist);
+  if (q && achados.length && !/^\d{5,}$/.test(q)) tempoHist = setTimeout(async () => {
+    if (P.historico[q] && Date.now() - P.historico[q].em < 60e3) return;
+    P = await prefs.mudar("historico", q, {});
+    $("historico").innerHTML = Object.entries(P.historico).sort((a, b) => b[1].em - a[1].em).map(([t]) => `<option value="${esc(t)}">`).join("");
+  }, 2500);
+}
+
+function mostrarAviso() {
+  const a = $("aviso");
+  a.innerHTML = [a.dataset.troca, esc(a.dataset.msg || "")].filter(Boolean).join(" · ");
+}
+
+function desenharTopo() {
+  $("q").value !== F.q && ($("q").value = F.q);
+  $("onde").value = F.onde;
+  $("ordem").value = F.ordem;
+  document.querySelectorAll("[data-periodo]").forEach((b) => b.classList.toggle("on", b.dataset.periodo === F.periodo || (b.dataset.periodo === "" && !F.periodo)));
+  $("pFav").classList.toggle("on", !!F.fav);
+  $("pImg").classList.toggle("on", !!F.img);
+  const n = GRUPOS.reduce((s, g) => s + (F.facetas[g]?.length || 0), 0) + (F.normal ? 1 : 0) + (F.periodo === "datas" ? 1 : 0);
+  $("bFiltros").textContent = n ? `Filtros (${n})` : "Filtros";
+  $("bFiltros").classList.toggle("on", n > 0);
+}
+
+const NOMES = { mod: "Modalidade", exame: "Exame", medico: "Médico", classe: "Classificações", achado: "Achados", colecao: "Coleções" };
+function desenharFacetas(cont) {
+  const chips = (g) => {
+    const sel = F.facetas[g] || [];
+    const itens = [...cont[g]];
+    for (const v of sel) if (!itens.some(([x]) => x === v)) itens.unshift([v, 0]);
+    if (!itens.length) return "";
+    const lim = abertos.has(g) ? itens.length : 8;
+    return `<div class="grupo"><h3>${NOMES[g]}${itens.length > 8 ? `<button class="mais" data-expandir="${g}">${abertos.has(g) ? "menos" : `todos (${itens.length})`}</button>` : ""}</h3>
+      <div class="chips">${itens.slice(0, lim).map(([v, n]) => `<button class="chip ${sel.includes(v) ? "on" : ""}" data-g="${g}" data-v="${esc(v)}"><span class="nome">${esc(v)}</span><span>${n}</span></button>`).join("")}</div></div>`;
+  };
+  const salvas = prefs.ativos(P, "buscas");
+  $("facetas").innerHTML = `
+    <div class="grupo"><h3>Buscas salvas <button class="mais" id="bSalvarBusca">★ salvar a atual</button></h3>
+      <div class="chips">${salvas.length ? salvas.map(([n]) => `<button class="chip" data-busca="${esc(n)}"><span class="nome">${esc(n)}</span><span data-apagarbusca="${esc(n)}" title="Apagar">✕</span></button>`).join("") : '<small style="color:var(--suave)">Nenhuma ainda.</small>'}</div></div>
+    <div class="grupo"><h3>Datas</h3><div class="datas"><input type="date" id="fDe" value="${F.periodo === "datas" ? esc(F.de) : ""}" title="De"><input type="date" id="fAte" value="${F.periodo === "datas" ? esc(F.ate) : ""}" title="Até"></div></div>
+    <div class="grupo"><h3>Laudos</h3><select id="fNormal"><option value="">todos</option><option value="alt" ${F.normal === "alt" ? "selected" : ""}>só com alteração</option><option value="normal" ${F.normal === "normal" ? "selected" : ""}>só 100% normais</option></select></div>
+    ${GRUPOS.map(chips).join("")}
+    <button id="bLimparTudo">Limpar todos os filtros</button>`;
+}
+
+function desenharFaixa() {
+  const partes = [];
+  if (vista === "lixeira") partes.push(`🗑 Lixeira — os laudos saem de vez depois de ${LIXEIRA_DIAS} dias. <button data-faixa="esvaziar">Esvaziar agora</button> <button data-faixa="sairLixeira">Voltar aos laudos</button>`);
+  if (estudo) partes.push(`🎓 Modo estudo — imagens primeiro, conclusão escondida. <button data-faixa="sairEstudo">Sair do modo estudo</button>`);
+  $("faixa").innerHTML = partes.join("<br>");
+}
+
+// ---------- cartões ----------
 function completar(r) {
   if (r.__ok) return r;
   const div = dividirLaudo(r.pars || []);
@@ -29,151 +157,212 @@ function completar(r) {
   r.__ok = true;
   return r;
 }
-
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const msg = (t) => { $("msg").textContent = t; };
-const POR_PAGINA = 50;
-let achados = [];
-let mostrando = 0;
-const urls = [];
-let MOSTRAR_RESUMO = lerLocal("app.mostrarResumo", false);
-
-const CAMPOS = ["fTexto", "fExame", "fMedico", "fDe", "fAte", "fNormal"];
-const lerFiltros = () => Object.fromEntries(CAMPOS.map((id) => [id, $(id).value.trim()]));
-{ const f = lerLocal("banco.filtros", {}); for (const id of CAMPOS) if (f[id] != null) $(id).value = f[id]; }
-
-function passa(r, f) {
-  if (f.fDe && r.data < f.fDe) return false;
-  if (f.fAte && r.data > f.fAte) return false;
-  if (f.fNormal === "alt" && r.normal) return false;
-  if (f.fNormal === "normal" && !r.normal) return false;
-  if (f.fExame && !confere(f.fExame, textoDoExame(r.desc, r.mod, r.titulo))) return false;
-  if (f.fMedico && !medicoConfere(f.fMedico, r.medico)) return false;
-  if (f.fTexto && !confere(f.fTexto, r.texto || "", { ignorarNegados: true, sinonimos: true })) return false;
-  return true;
-}
-
-async function buscar() {
-  const f = lerFiltros();
-  gravarLocal("banco.filtros", f);
-  for (const u of urls.splice(0)) URL.revokeObjectURL(u);
-  achados = [];
-  const meds = new Map();
-  let total = 0;
-  await db.percorrer((r) => {
-    total++;
-    if (r.medico) meds.set(r.medico, (meds.get(r.medico) || 0) + 1);
-    if (passa(r, f)) achados.push(r);
-  });
-  $("listaMedicos").innerHTML = [...meds].sort((a, b) => b[1] - a[1])
-    .map(([m, n]) => `<option value="${esc(m)}">${n} laudo(s)</option>`).join("");
-  $("resumo").textContent = `${achados.length} de ${total} laudo(s)`;
-  mostrando = 0;
-  $("lista").innerHTML = "";
-  if (!total) {
-    $("lista").innerHTML = drive.conectado() || extensao()
-      ? '<div class="vazio">O banco ainda está vazio. Toque em <b>⇅ Sincronizar</b>.</div>'
-      : '<div class="vazio">O banco deste aparelho está vazio.<br>Toque em <b>⚙</b> › <b>Conectar ao Google Drive</b> para trazer os laudos.</div>';
-    return;
-  }
-  if (!achados.length) { $("lista").innerHTML = '<div class="vazio">Nenhum laudo com esses filtros.</div>'; return; }
-  mostrarMais();
-}
-
 const semNum = (p) => (p.length ? [{ ...p[0], t: p[0].t.replace(/^\s*\d{1,2}\s*[).\-–:]\s*/, "") }, ...p.slice(1)] : p);
 const dataBr = (iso) => (iso ? iso.split("-").reverse().join("/") : "?");
-const htmlPar = (p) => p.map(({ t, b, i, u }) => {
-  let x = esc(t);
+const htmlPar = (p, marca = true) => p.map(({ t, b, i, u }) => {
+  let x = marca && termos.length ? marcar(t, termos).map((s) => (s.m ? `<mark>${esc(s.t)}</mark>` : esc(s.t))).join("") : esc(t);
   if (u) x = `<u>${x}</u>`;
   if (i) x = `<i>${x}</i>`;
   if (b) x = `<b>${x}</b>`;
   return x;
 }).join("");
-const fmtConc = (r, p) => htmlPar(r.destaqueManual ? semNum(p) : destacarConclusao(semNum(p)));
+const fmtConc = (r, p, marca) => htmlPar(r.destaqueManual ? semNum(p) : destacarConclusao(semNum(p)), marca);
+const nImgs = (r) => Math.max(r.nImagens || 0, r.imgs?.length || 0, r.imgsLocais || 0);
 
-function cartao(r) {
-  completar(r);
+function cartao(ix) {
+  const r = completar(ix.r);
   const conc = r.concPars.length ? r.concPars.map((p) => fmtConc(r, p)) : r.itensConc.map((c) => htmlPar(destacarConclusao([{ t: c }])));
+  const tags = [...ix.classes.map((v) => `<button class="tag classe" data-g="classe" data-v="${esc(v)}">${esc(v)}</button>`),
+    ...ix.achadosEtq.map((v) => `<button class="tag achado" data-g="achado" data-v="${esc(v)}">${esc(v)}</button>`),
+    ...(r.colecoes || []).map((v) => `<button class="tag colecao" data-g="colecao" data-v="${esc(v)}">${esc(v)}</button>`)].join("");
+  const lixeira = vista === "lixeira";
+  const n = nImgs(r);
+  const corpoEstudo = `<div class="imgs" data-lazy="1">${n ? "" : '<div class="carregando">sem imagens</div>'}</div>
+    <div class="esconde"><button data-acao="revelar">Mostrar conclusão</button></div>
+    <ol class="conc" hidden>${conc.map((c) => `<li>${c}</li>`).join("")}</ol>`;
   return `<div class="item ${r.normal ? "normal" : ""}" data-acc="${esc(r.acc)}">
-    <div class="cab" title="Toque para abrir o laudo completo"><span class="acc">${esc(r.acc)}</span><span class="data">${dataBr(r.data)}</span>${esc(r.titulo)}<button class="lixo" data-acao="apagar" title="Apagar">🗑</button></div>
+    <div class="cab" title="Abrir o laudo completo"><div class="cabtxt"><span class="acc">${esc(r.acc)}</span><span class="data">${dataBr(r.data)}</span><span class="titulo">${esc(r.titulo)}</span></div><div class="cabbtn">
+      ${lixeira ? "" : `<button class="icone fav ${r.fav ? "on" : ""}" data-acao="fav" title="Favorito (f)">${r.fav ? "★" : "☆"}</button>`}
+      <button class="icone" data-acao="${lixeira ? "apagarDeVez" : "lixeira"}" title="${lixeira ? "Apagar de vez" : "Mover para a lixeira"}">🗑</button></div></div>
     <div class="sub">${[esc(r.medico || ""), esc([r.sexo, r.idade != null ? r.idade + " anos" : ""].filter(Boolean).join(", ")),
-      r.nImagens ? `🖼 ${r.nImagens}` : "", r.indicacao ? `Indicação: ${esc(r.indicacao)}` : ""].filter(Boolean).join(" · ")}</div>
-    ${MOSTRAR_RESUMO ? `<div class="resumo" contenteditable="true" data-campo="resumo" title="Toque para editar (em branco = automático)">${esc(r.resumo || "")}</div>` : ""}
-    <ol class="conc" contenteditable="true" data-campo="conc" title="Toque para editar">${conc.map((c) => `<li>${c}</li>`).join("")}</ol>
+      n ? `🖼 ${n}` : "", r.indicacao ? `Indicação: ${esc(r.indicacao)}` : "",
+      lixeira ? `na lixeira desde ${new Date(r.lixeiraEm).toLocaleDateString("pt-BR")}` : ""].filter(Boolean).join(" · ")}</div>
+    ${!estudo && tags ? `<div class="tags">${tags}</div>` : ""}
+    ${!estudo && MOSTRAR_RESUMO ? `<div class="resumo" contenteditable="true" data-campo="resumo" title="Toque para editar (em branco = automático)">${esc(r.resumo || "")}</div>` : ""}
+    ${estudo ? corpoEstudo : `<ol class="conc" contenteditable="true" data-campo="conc" title="Toque para editar">${conc.map((c) => `<li>${c}</li>`).join("")}</ol>`}
+    ${!estudo && r.nota ? `<div class="nota">📝 ${esc(r.nota)}</div>` : ""}
+    ${lixeira ? `<div class="acoes"><button data-acao="restaurar">Restaurar</button><button data-acao="apagarDeVez">Apagar de vez</button></div>` : ""}
     <div class="aberto"></div>
   </div>`;
 }
 
+let observador = null;
 function mostrarMais() {
-  $("lista").querySelector(".mais")?.remove();
+  $("mostrarMais")?.remove();
   const prox = achados.slice(mostrando, mostrando + POR_PAGINA);
   $("lista").insertAdjacentHTML("beforeend", prox.map(cartao).join(""));
   mostrando += prox.length;
-  if (mostrando < achados.length) $("lista").insertAdjacentHTML("beforeend", `<button class="mais">Mostrar mais (${achados.length - mostrando})</button>`);
+  if (mostrando < achados.length) $("lista").insertAdjacentHTML("beforeend", `<button id="mostrarMais">Mostrar mais (${achados.length - mostrando})</button>`);
+  if (estudo) {
+    observador ||= new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) {
+        observador.unobserve(e.target);
+        const ix = acharIx(e.target.closest(".item")?.dataset.acc);
+        if (ix && nImgs(ix.r)) carregarImagens(e.target, ix.r);
+      }
+    }, { rootMargin: "300px" });
+    $("lista").querySelectorAll('.imgs[data-lazy="1"]').forEach((el) => { el.dataset.lazy = "2"; observador.observe(el); });
+  }
 }
+const acharIx = (acc) => achados.find((x) => x.r.acc === acc) || todos.find((x) => x.r.acc === acc);
 
-async function abrir(item) {
-  const box = item.querySelector(".aberto");
-  if (box.innerHTML) { box.innerHTML = ""; return; }
-  const r = achados.find((x) => x.acc === item.dataset.acc);
-  if (!r) return;
-  completar(r);
-  let html = "", lista = [];
-  const fecharLista = () => { if (lista.length) html += `<ol>${lista.map((p) => `<li>${fmtConc(r, p)}</li>`).join("")}</ol>`; lista = []; };
-  for (const p of r.pars || []) { if (r.concSet.has(p)) lista.push(p); else { fecharLista(); html += `<p>${htmlPar(p)}</p>`; } }
-  fecharLista();
-  const n = Math.max(r.nImagens || 0, r.imgs?.length || 0, r.imgsLocais || 0);
-  box.innerHTML = `<div class="laudo">${html}</div>
-    ${n ? `<div class="imgs">${Array.from({ length: n }, (_, i) => `<div class="carregando" data-i="${i}">imagem ${i + 1}…</div>`).join("")}</div>` : ""}
-    <div class="acoes"><button data-acao="editar">✎ Editar</button><button data-acao="copiar">Copiar texto</button>${r.notionId && r.notionPagina
-      ? `<button data-acao="notion" title="Abre este laudo na página do Notion">Notion ↗</button>` : ""}<button data-acao="apagar">Apagar</button></div>`;
-  // imagens: do cache deste aparelho ou baixadas do Drive (precisa estar conectado)
+// imagens: do cache deste aparelho ou baixadas do Drive
+async function carregarImagens(box, r) {
+  const n = nImgs(r);
+  box.innerHTML = Array.from({ length: n }, (_, i) => `<div class="carregando" data-i="${i}">imagem ${i + 1}…</div>`).join("");
+  const srcs = [];
   for (let i = 0; i < n; i++) {
     const lugar = box.querySelector(`.carregando[data-i="${i}"]`);
     if (!lugar) break;
     try {
       const b = await imagemDe(drive.conectado() ? drive.adaptador : null, r, i);
-      if (!b) { lugar.textContent = drive.conectado() ? "sem imagem" : "conecte ao Drive"; continue; }
+      if (!b) { lugar.textContent = drive.conectado() ? "ainda não enviada pelo PC" : "conecte ao Drive para ver"; continue; }
       const u = URL.createObjectURL(b);
       urls.push(u);
-      lugar.outerHTML = `<img src="${u}" alt="imagem chave">`;
-    } catch (e) { lugar.textContent = e.login ? "conecte ao Drive" : "erro"; }
+      srcs.push(u);
+      lugar.outerHTML = `<img src="${u}" alt="imagem chave ${i + 1}" data-n="${srcs.length - 1}">`;
+    } catch (e) { lugar.textContent = e.login ? "conecte ao Drive para ver" : "erro ao baixar"; }
   }
+  box.srcs = srcs;
 }
 
+async function abrir(item, forcar) {
+  const box = item.querySelector(".aberto");
+  if (box.innerHTML && !forcar) { box.innerHTML = ""; return; }
+  const ix = acharIx(item.dataset.acc);
+  if (!ix) return;
+  const r = completar(ix.r);
+  let html = "", lista = [];
+  const fecharLista = () => { if (lista.length) html += `<ol>${lista.map((p) => `<li>${fmtConc(r, p)}</li>`).join("")}</ol>`; lista = []; };
+  for (const p of r.pars || []) { if (r.concSet.has(p)) lista.push(p); else { fecharLista(); html += `<p>${htmlPar(p)}</p>`; } }
+  fecharLista();
+  const par = vista === "lixeira" ? [] : parecidos(ix, todos.filter((x) => !x.r.lixeiraEm));
+  box.innerHTML = `<div class="laudo">${html}</div>
+    ${nImgs(r) ? `<div class="imgs"></div>` : ""}
+    ${vista === "lixeira" ? "" : `<div class="acoes"><button data-acao="editar">✎ Editar</button><button data-acao="copiar">Copiar texto</button>
+      <button data-acao="frase" title="Guarda o trecho selecionado (ou a conclusão) como frase-modelo">＋ Frase</button>
+      <button data-acao="colecoes">Coleções</button>${r.notionId && r.notionPagina ? `<button data-acao="notion">Notion ↗</button>` : ""}</div>
+    <div class="notaEd"><textarea data-nota placeholder="Nota pessoal (só sua; vai para todos os aparelhos)">${esc(r.nota || "")}</textarea></div>
+    ${par.length ? `<div class="parecidos"><b>Laudos parecidos</b>${par.map((p) => `<a data-ir="${esc(p.r.acc)}">${esc(abreviarTitulo(p.r.titulo))} · ${dataBr(p.r.data)} — ${esc((p.r.resumo || p.achadosEtq.join(", ")).slice(0, 90))}</a>`).join("")}</div>` : ""}`}`;
+  const imgs = box.querySelector(".imgs");
+  if (imgs) carregarImagens(imgs, r);
+}
+
+// ---------- ações nos cartões ----------
 $("lista").addEventListener("click", async (e) => {
-  if (e.target.classList.contains("mais")) return mostrarMais();
+  if (e.target.id === "mostrarMais") return mostrarMais();
   const item = e.target.closest(".item");
+  const tag = e.target.closest("[data-g]");
+  if (tag && item) { ligarFaceta(tag.dataset.g, tag.dataset.v, true); return; }
   if (!item) return;
-  if (e.target.tagName === "IMG") { $("zoom").querySelector("img").src = e.target.src; $("zoom").style.display = "flex"; return; }
+  selecionar(item, false);
+  if (e.target.tagName === "IMG") { const box = e.target.closest(".imgs"); return abrirVisor(box.srcs || [e.target.src], +e.target.dataset.n || 0); }
+  const ir = e.target.closest("[data-ir]");
+  if (ir) { irPara(ir.dataset.ir); return; }
   const acao = e.target.closest("[data-acao]")?.dataset.acao;
-  const r = achados.find((x) => x.acc === item.dataset.acc);
-  if (acao === "copiar" && r) {
-    const txt = [r.titulo, `Acesso ${r.acc} · ${dataBr(r.data)} · ${r.medico || ""}`, "", ...(r.pars || []).map((p) => p.map((s) => s.t).join(""))].join("\n");
-    try { await navigator.clipboard.writeText(txt); msg("Laudo copiado"); } catch { msg("Não consegui copiar"); }
-    return;
-  }
-  if (acao === "editar" && r) return editar(item, r);
-  if (acao === "salvar" && r) return salvar(item, r);
-  if (acao === "cancelar" && r) { item.querySelector(".aberto").innerHTML = ""; return abrir(item); }
-  if (acao === "notion" && r) {
-    window.open(`https://www.notion.so/${String(r.notionPagina).replace(/-/g, "")}#${String(r.notionId).replace(/-/g, "")}`, "_blank");
-    return;
-  }
-  if (acao === "apagar" && r) {
-    if (!confirm(`Apagar o acesso ${r.acc}?\n(sai deste banco em todos os aparelhos e do banco da extensão; o Notion não muda)`)) return;
-    await apagarDoBanco([r]);
-    item.remove();
-    msg(`Acesso ${r.acc} apagado`);
-    return;
+  const ix = acharIx(item.dataset.acc);
+  const r = ix?.r;
+  if (!r) return;
+  if (acao === "fav") return anotar(r, { fav: !r.fav }).then(() => redesenhar(item));
+  if (acao === "copiar") return copiar(r);
+  if (acao === "editar") return editar(item, r);
+  if (acao === "salvar") return salvar(item, r);
+  if (acao === "cancelar") return abrir(item, true);
+  if (acao === "frase") return guardarFrase(r);
+  if (acao === "colecoes") return abrirColecoes(r);
+  if (acao === "revelar") { item.querySelector(".conc").hidden = false; e.target.closest(".esconde").remove(); return; }
+  if (acao === "notion") return window.open(`https://www.notion.so/${String(r.notionPagina).replace(/-/g, "")}#${String(r.notionId).replace(/-/g, "")}`, "_blank");
+  if (acao === "lixeira") { await moverParaLixeira([r]); item.remove(); msg(`Acesso ${r.acc} foi para a lixeira`); return; }
+  if (acao === "restaurar") { await anotar(r, { lixeiraEm: 0 }); item.remove(); msg(`Acesso ${r.acc} restaurado`); return; }
+  if (acao === "apagarDeVez") {
+    if (!confirm(`Apagar de vez o acesso ${r.acc}?\n(sai de todos os aparelhos, do Drive e do banco da extensão; o Notion não muda)`)) return;
+    await apagarDeVez([r]); item.remove(); msg(`Acesso ${r.acc} apagado de vez`); return;
   }
   if (e.target.closest(".cab")) abrir(item);
 });
-$("zoom").addEventListener("click", () => { $("zoom").style.display = "none"; });
 
-// ---------- edição direta no cartão (conclusão e resumo) ----------
-// Ctrl+B negrito, Ctrl+S sublinhado (Ctrl+U também); no celular, a barrinha de baixo. Salva ao sair do campo.
+function redesenhar(item) {
+  const ix = acharIx(item.dataset.acc);
+  if (!ix) return;
+  const aberto = !!item.querySelector(".aberto").innerHTML;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = cartao(ix);
+  const novo = tmp.firstElementChild;
+  if (item.classList.contains("sel")) novo.classList.add("sel");
+  item.replaceWith(novo);
+  if (aberto) abrir(novo);
+  return novo;
+}
+async function atualizarIx(acc) {
+  const r = await db.laudo(acc);
+  const novo = r && !r.apagado ? indexar(r) : null;
+  for (const arr of [todos, achados]) {
+    const i = arr.findIndex((x) => x.r.acc === acc);
+    if (i >= 0) { if (novo) arr[i] = novo; else arr.splice(i, 1); }
+  }
+  return novo;
+}
+async function irPara(acc) {
+  F = { ...PADRAO, q: acc, ordem: F.ordem };
+  vista = "laudos";
+  await buscar();
+  const item = $("lista").querySelector(".item");
+  if (item) { abrir(item); selecionar(item, true); }
+}
+async function copiar(r) {
+  const txt = [r.titulo, `Acesso ${r.acc} · ${dataBr(r.data)} · ${r.medico || ""}`, "", ...(r.pars || []).map((p) => p.map((s) => s.t).join(""))].join("\n");
+  try { await navigator.clipboard.writeText(txt); msg("Laudo copiado"); } catch { msg("Não consegui copiar"); }
+}
+
+// anotações (favorito, coleções, nota, lixeira): não mexem no conteúdo do laudo nem vão para a extensão
+async function anotar(r, campos) {
+  const agora = Date.now();
+  await db.atualizar(r.acc, { ...campos, anotEm: agora, mudadoEm: agora });
+  await atualizarIx(r.acc);
+  agendarSincronia();
+}
+$("lista").addEventListener("change", async (e) => {
+  if (!e.target.matches("[data-nota]")) return;
+  const r = acharIx(e.target.closest(".item")?.dataset.acc)?.r;
+  if (!r) return;
+  await anotar(r, { nota: e.target.value.trim() });
+  msg("Nota salva");
+  const item = e.target.closest(".item");
+  const nota = item.querySelector(".nota");
+  if (nota) nota.textContent = e.target.value.trim() ? "📝 " + e.target.value.trim() : "";
+});
+
+// ---------- lixeira ----------
+async function moverParaLixeira(regs) {
+  for (const r of regs) await anotar(r, { lixeiraEm: Date.now() });
+}
+async function apagarDeVez(regs) {
+  const agora = Date.now();
+  for (const r of regs) {
+    const l = await db.laudo(r.acc);
+    await db.apagarImagens(r.acc, nImgs(l || r));
+    await db.salvar({ acc: r.acc, data: r.data, apagado: true, mudadoEm: agora, nuvemEm: l?.nuvemEm ?? null, apagarImgs: l?.imgs || [] });
+    await atualizarIx(r.acc);
+  }
+  agendarSincronia();
+}
+async function esvaziarVencidos() {
+  const limite = Date.now() - LIXEIRA_DIAS * DIA;
+  const vencidos = todos.filter((ix) => ix.r.lixeiraEm && ix.r.lixeiraEm < limite).map((ix) => ix.r);
+  if (vencidos.length) await apagarDeVez(vencidos);
+}
+
+// ---------- edição (igual à página Banco da extensão) ----------
 $("lista").addEventListener("keydown", (e) => {
   if (!e.target.isContentEditable || !e.ctrlKey) return;
   const k = e.key.toLowerCase();
@@ -181,11 +370,11 @@ $("lista").addEventListener("keydown", (e) => {
   else if (k === "b") { e.preventDefault(); document.execCommand("bold"); }
   else if (k === "i") { e.preventDefault(); document.execCommand("italic"); }
 });
-$("fmt").addEventListener("mousedown", (e) => e.preventDefault());       // não tira o foco do texto
+$("fmt").addEventListener("mousedown", (e) => e.preventDefault());
 $("fmt").addEventListener("touchstart", (e) => { const b = e.target.closest("[data-fmt]"); if (b) { e.preventDefault(); document.execCommand(b.dataset.fmt); } }, { passive: false });
 $("fmt").addEventListener("click", (e) => { const b = e.target.closest("[data-fmt]"); if (b) document.execCommand(b.dataset.fmt); });
 $("lista").addEventListener("focusin", (e) => {
-  if (e.target.isContentEditable) $("fmt").style.display = "flex";
+  if (e.target.isContentEditable && matchMedia("(pointer: coarse)").matches) $("fmt").style.display = "flex";
   const el = e.target.closest?.("[data-campo]");
   if (el && el.dataset.orig == null) el.dataset.orig = el.innerHTML;
 });
@@ -194,7 +383,7 @@ $("lista").addEventListener("focusout", async (e) => {
   const el = e.target.closest?.("[data-campo]");
   if (!el || el.dataset.orig == null || el.innerHTML === el.dataset.orig) return;
   const item = el.closest(".item");
-  const r = achados.find((x) => x.acc === item?.dataset.acc);
+  const r = acharIx(item?.dataset.acc)?.r;
   if (!r) return;
   el.dataset.orig = el.innerHTML;
   completar(r);
@@ -210,14 +399,11 @@ async function salvarEdicao(r, pars, resumo, destaqueManual = true) {
   const atual = await db.laudo(r.acc);
   if (!atual) throw new Error("laudo não encontrado");
   await db.atualizar(r.acc, camposDaEdicao(atual, pars, resumo, destaqueManual));
-  const novo = await db.laudo(r.acc);
-  const i = achados.indexOf(r);
-  if (novo && i >= 0) achados[i] = novo;
+  vocab = null;
+  const novo = await atualizarIx(r.acc);
   agendarSincronia();
   return novo;
 }
-
-// os parágrafos da conclusão no laudo são trocados pelos editados (no mesmo lugar)
 function trocarConclusao(r, itens) {
   const fora = new Set(r.concPars || []);
   const cabConc = () => [{ t: "Conclusão:", b: true, i: false, u: false }];
@@ -233,12 +419,18 @@ function trocarConclusao(r, itens) {
   out.splice(ins, 0, ...itens);
   return out;
 }
-
-// ---------- editar o laudo ----------
 function editar(item, r) {
   const box = item.querySelector(".aberto");
+  if (!box.innerHTML) { abrir(item).then(() => editar(item, r)); return; }
   const laudoEl = box.querySelector(".laudo");
   if (!laudoEl) return;
+  // sem os destaques da busca no texto que vai ser editado
+  completar(r);
+  let html = "", lista = [];
+  const fecharLista = () => { if (lista.length) html += `<ol>${lista.map((p) => `<li>${fmtConc(r, p, false)}</li>`).join("")}</ol>`; lista = []; };
+  for (const p of r.pars || []) { if (r.concSet.has(p)) lista.push(p); else { fecharLista(); html += `<p>${htmlPar(p, false)}</p>`; } }
+  fecharLista();
+  laudoEl.innerHTML = html;
   laudoEl.contentEditable = "true";
   laudoEl.classList.add("editando");
   laudoEl.focus();
@@ -247,8 +439,6 @@ function editar(item, r) {
     <button data-acao="salvar">Salvar</button><button data-acao="cancelar">Cancelar</button>`;
   msg("Editando — Ctrl+B negrito, Ctrl+I itálico, Ctrl+U sublinhado");
 }
-
-// HTML editado -> parágrafos {t, b, i, u}; itens de lista numerada viram "1. ...", "2. ..."
 function lerEditado(el) {
   const pars = [];
   const trechos = (no, f, out) => {
@@ -274,48 +464,209 @@ function lerEditado(el) {
   }
   return pars;
 }
-
 async function salvar(item, r) {
   const box = item.querySelector(".aberto");
   const pars = lerEditado(box.querySelector(".laudo"));
   if (!pars.length) return msg("O laudo ficou vazio — nada foi salvo");
   const resumo = box.querySelector(".edResumo")?.value || "";
-  const novo = await salvarEdicao(r, pars, resumo, !!r.destaqueManual);
-  const tmp = document.createElement("div");
-  tmp.innerHTML = cartao(novo || r);
-  const el = tmp.firstElementChild;
-  item.replaceWith(el);
-  abrir(el);
+  await salvarEdicao(r, pars, resumo, !!r.destaqueManual);
+  const novo = redesenhar(item);
+  if (novo) abrir(novo, true);
   msg("Laudo salvo");
 }
 
-// apagar = lápide: a exclusão chega ao Drive, aos outros aparelhos e ao banco da extensão
-async function apagarDoBanco(regs) {
-  const agora = Date.now();
-  for (const r of regs) {
-    const l = await db.laudo(r.acc);
-    await db.apagarImagens(r.acc, Math.max(l?.nImagens || 0, l?.imgsLocais || 0));
-    await db.salvar({ acc: r.acc, data: r.data, apagado: true, mudadoEm: agora, nuvemEm: l?.nuvemEm ?? null });
-  }
-  const fora = new Set(regs);
-  const antes = achados.length;
-  achados = achados.filter((x) => !fora.has(x));
-  mostrando = Math.max(0, mostrando - (antes - achados.length));
-  agendarSincronia();
-}
-async function apagarFiltrados() {
-  if (!achados.length) return msg("Nenhum laudo na busca atual");
-  const n = achados.length;
-  if (!confirm(`Apagar os ${n} laudo(s) da busca atual?\n(de todos os aparelhos e do banco da extensão; o Notion não muda)`)) return;
-  if (n > 20 && prompt(`São ${n} laudos. Para confirmar, digite APAGAR`) !== "APAGAR") return msg("Nada foi apagado");
-  await apagarDoBanco([...achados]);
-  msg(`${n} laudo(s) apagado(s)`);
+// ---------- facetas, períodos, buscas salvas ----------
+function ligarFaceta(g, v, so = false) {
+  const sel = new Set(F.facetas[g] || []);
+  if (sel.has(v) && !so) sel.delete(v); else sel.add(v);
+  F.facetas = { ...F.facetas, [g]: [...sel] };
   buscar();
 }
-$("bApagarFiltrados").addEventListener("click", apagarFiltrados);
-$("oApagar").addEventListener("click", () => { $("dOpcoes").close(); apagarFiltrados(); });
+$("facetas").addEventListener("click", async (e) => {
+  const ap = e.target.closest("[data-apagarbusca]");
+  if (ap) { e.stopPropagation(); if (confirm(`Apagar a busca salva "${ap.dataset.apagarbusca}"?`)) { P = await prefs.apagar("buscas", ap.dataset.apagarbusca); agendarSincronia(); buscar(); } return; }
+  const b = e.target.closest("[data-busca]");
+  if (b) { const s = P.buscas[b.dataset.busca]; if (s) { F = { ...PADRAO, ...s.f }; vista = "laudos"; buscar(); } return; }
+  const c = e.target.closest(".chip[data-g]");
+  if (c) return ligarFaceta(c.dataset.g, c.dataset.v);
+  const x = e.target.closest("[data-expandir]");
+  if (x) { abertos.has(x.dataset.expandir) ? abertos.delete(x.dataset.expandir) : abertos.add(x.dataset.expandir); return buscar(); }
+  if (e.target.id === "bLimparTudo") { F = { ...PADRAO, ordem: F.ordem }; return buscar(); }
+  if (e.target.id === "bSalvarBusca") {
+    const nome = prompt("Nome desta busca:", F.q || "Minha busca");
+    if (!nome?.trim()) return;
+    P = await prefs.mudar("buscas", nome.trim(), { f: { ...F } });
+    agendarSincronia();
+    buscar();
+    msg(`Busca "${nome.trim()}" salva`);
+  }
+});
+$("facetas").addEventListener("change", (e) => {
+  if (e.target.id === "fNormal") { F.normal = e.target.value; buscar(); }
+  if (e.target.id === "fDe" || e.target.id === "fAte") {
+    F.de = $("fDe").value; F.ate = $("fAte").value;
+    F.periodo = F.de || F.ate ? "datas" : "";
+    buscar();
+  }
+});
+let tempo = null;
+$("q").addEventListener("input", () => { F.q = $("q").value; clearTimeout(tempo); tempo = setTimeout(buscar, 300); });
+$("onde").addEventListener("change", () => { F.onde = $("onde").value; buscar(); });
+$("ordem").addEventListener("change", () => { F.ordem = $("ordem").value; buscar(); });
+document.querySelectorAll("[data-periodo]").forEach((b) => b.addEventListener("click", () => { F.periodo = b.dataset.periodo; F.de = F.ate = ""; buscar(); }));
+$("pFav").addEventListener("click", () => { F.fav = !F.fav; buscar(); });
+$("pImg").addEventListener("click", () => { F.img = !F.img; buscar(); });
+$("bFiltros").addEventListener("click", () => document.body.classList.toggle("filtros"));
+$("faixa").addEventListener("click", async (e) => {
+  const a = e.target.dataset.faixa;
+  if (a === "sairLixeira") { vista = "laudos"; buscar(); }
+  if (a === "sairEstudo") { estudo = false; gravarLocal("app.estudo", false); buscar(); }
+  if (a === "esvaziar" && achados.length && confirm(`Apagar de vez os ${achados.length} laudo(s) da lixeira?`)) { await apagarDeVez(achados.map((x) => x.r)); buscar(); }
+});
 
-// resumos no formato atual (RESUMO_VERSAO de lib/secoes.js)
+// ---------- coleções ----------
+let colAlvo = null;
+function abrirColecoes(r) {
+  colAlvo = r;
+  const nomes = new Set([...prefs.ativos(P, "colecoes").map(([n]) => n), ...todos.flatMap((ix) => ix.r.colecoes || [])]);
+  $("colLista").innerHTML = nomes.size ? [...nomes].sort().map((n) => `<label class="check"><input type="checkbox" data-col="${esc(n)}" ${(r.colecoes || []).includes(n) ? "checked" : ""}> ${esc(n)}</label>`).join("")
+    : "<small>Nenhuma coleção ainda. Crie a primeira abaixo.</small>";
+  $("dColecoes").showModal();
+}
+$("colLista").addEventListener("change", async (e) => {
+  const n = e.target.dataset.col;
+  if (!n || !colAlvo) return;
+  const set = new Set(colAlvo.colecoes || []);
+  e.target.checked ? set.add(n) : set.delete(n);
+  await anotar(colAlvo, { colecoes: [...set] });
+  colAlvo = acharIx(colAlvo.acc)?.r || colAlvo;
+  const item = $("lista").querySelector(`.item[data-acc="${CSS.escape(colAlvo.acc)}"]`);
+  if (item) redesenhar(item);
+});
+$("colCriar").addEventListener("click", async () => {
+  const n = $("colNova").value.trim();
+  if (!n) return;
+  P = await prefs.mudar("colecoes", n, {});
+  $("colNova").value = "";
+  if (colAlvo) { await anotar(colAlvo, { colecoes: [...new Set([...(colAlvo.colecoes || []), n])] }); colAlvo = acharIx(colAlvo.acc)?.r || colAlvo; abrirColecoes(colAlvo); }
+  const item = colAlvo && $("lista").querySelector(`.item[data-acc="${CSS.escape(colAlvo.acc)}"]`);
+  if (item) redesenhar(item);
+});
+
+// ---------- frases-modelo ----------
+async function guardarFrase(r) {
+  let t = String(getSelection()?.toString() || "").trim();
+  if (!t) { completar(r); t = prompt("Frase-modelo (edite à vontade):", r.itensConc.join(" ")) || ""; }
+  if (!t.trim()) return;
+  P = await prefs.mudar("frases", "f" + Date.now().toString(36), { texto: t.trim() });
+  agendarSincronia();
+  msg("Frase guardada (⋯ › Frases-modelo)");
+}
+function desenharFrases() {
+  const filtro = $("fBusca").value.trim();
+  const lista = prefs.ativos(P, "frases").sort((a, b) => b[1].em - a[1].em)
+    .filter(([, v]) => !filtro || v.texto.toLowerCase().includes(filtro.toLowerCase()));
+  $("frases").innerHTML = lista.length ? lista.map(([k, v]) => `<div class="frase"><p data-copiar="${esc(k)}" title="Copiar">${esc(v.texto)}</p><button class="icone" data-apagarfrase="${esc(k)}" title="Apagar">✕</button></div>`).join("")
+    : "<small>Nenhuma frase. Abra um laudo, selecione um trecho e toque em ＋ Frase, ou escreva abaixo.</small>";
+}
+$("fBusca").addEventListener("input", desenharFrases);
+$("frases").addEventListener("click", async (e) => {
+  const c = e.target.closest("[data-copiar]");
+  if (c) { try { await navigator.clipboard.writeText(P.frases[c.dataset.copiar].texto); msg("Frase copiada"); c.style.opacity = .5; setTimeout(() => (c.style.opacity = 1), 400); } catch {} return; }
+  const a = e.target.closest("[data-apagarfrase]");
+  if (a && confirm("Apagar esta frase?")) { P = await prefs.apagar("frases", a.dataset.apagarfrase); agendarSincronia(); desenharFrases(); }
+});
+$("fSalvar").addEventListener("click", async () => {
+  const t = $("fNova").value.trim();
+  if (!t) return;
+  P = await prefs.mudar("frases", "f" + Date.now().toString(36), { texto: t });
+  $("fNova").value = "";
+  agendarSincronia();
+  desenharFrases();
+});
+
+// ---------- estatísticas ----------
+function desenharEstat() {
+  const s = estatisticas(achados);
+  const barras = (titulo, lista, g) => {
+    if (!lista.length) return "";
+    const max = lista[0][1];
+    return `<h3 style="font-size:13px;margin:0 0 6px">${titulo}</h3><div class="barras">${lista.slice(0, 10).map(([v, n]) =>
+      `<span class="r" ${g ? `data-g="${g}" data-v="${esc(v)}"` : ""} title="${esc(v)}">${esc(v)}</span><span class="b" style="width:${Math.max(2, (n / max) * 100)}%"></span><span>${n}</span>`).join("")}</div>`;
+  };
+  const meses = s.meses.slice(-24);
+  const mx = Math.max(1, ...meses.map((m) => m[1]));
+  $("estat").innerHTML = `<div class="numeros"><div><b>${s.total}</b><span>laudos na busca</span></div><div><b>${s.total ? Math.round((s.normais / s.total) * 100) : 0}%</b><span>100% normais</span></div>
+      <div><b>${s.medico.length}</b><span>médicos</span></div><div><b>${s.exame.length}</b><span>tipos de exame</span></div></div>
+    ${meses.length ? `<h3 style="font-size:13px;margin:0">Laudos por mês</h3><div class="meses">${meses.map(([m, n]) => `<i style="height:${(n / mx) * 100}%" title="${m}: ${n}"></i>`).join("")}</div>
+      <div class="meses-rot"><span>${meses[0][0]}</span><span>${meses[meses.length - 1][0]}</span></div>` : ""}
+    ${barras("Achados mais comuns", s.achado, "achado")}${barras("Classificações", s.classe, "classe")}${barras("Exames", s.exame, "exame")}
+    ${barras("Médicos", s.medico, "medico")}${barras("Modalidades", s.mod, "mod")}
+    <small>Toque num item para filtrar por ele.</small>`;
+}
+$("estat").addEventListener("click", (e) => {
+  const c = e.target.closest("[data-g]");
+  if (c) { $("dEstat").close(); ligarFaceta(c.dataset.g, c.dataset.v, true); }
+});
+
+// ---------- exportar ----------
+function baixar(nome, conteudo, tipo) {
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([conteudo], { type: tipo })), download: nome });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function exportarCsv() {
+  const cel = (v) => { const s = String(v ?? ""); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const cab = ["acesso", "data", "exame", "modalidade", "medico", "idade", "sexo", "indicacao", "conclusao", "classificacoes", "achados", "colecoes", "favorito", "nota"];
+  const linhas = achados.map((ix) => { const r = completar(ix.r); return [r.acc, dataBr(r.data), r.titulo, ix.mod, r.medico, r.idade ?? "", r.sexo || "", r.indicacao || "",
+    r.itensConc.map((c, i) => `${i + 1}. ${c}`).join(" "), ix.classes.join(", "), ix.achadosEtq.join(", "), (r.colecoes || []).join(", "), r.fav ? "sim" : "", r.nota || ""].map(cel).join(";"); });
+  baixar(`laudos-${new Date().toISOString().slice(0, 10)}.csv`, "﻿" + [cab.join(";"), ...linhas].join("\r\n"), "text/csv;charset=utf-8");
+  msg(`${achados.length} laudo(s) exportado(s)`);
+}
+function exportarPdf() {
+  const t0 = termos; termos = [];
+  $("impressao").innerHTML = `<h1>Banco de laudos — ${achados.length} laudo(s)${F.q ? ` · busca: ${esc(F.q)}` : ""}</h1>` + achados.map((ix) => {
+    const r = completar(ix.r);
+    return `<div class="p"><b>${esc(r.titulo)}</b> — ${dataBr(r.data)} · acesso ${esc(r.acc)} · ${esc(r.medico || "")}<br>
+      ${r.indicacao ? `<i>Indicação:</i> ${esc(r.indicacao)}<br>` : ""}${r.itensConc.map((c, i) => `${i + 1}. ${esc(c)}`).join("<br>")}${r.nota ? `<br><i>Nota:</i> ${esc(r.nota)}` : ""}</div>`;
+  }).join("");
+  termos = t0;
+  setTimeout(() => window.print(), 50);
+}
+
+// ---------- menu ----------
+$("bMenu").addEventListener("click", () => {
+  $("mEstudo").textContent = estudo ? "ligado" : "desligado";
+  const nl = todos.filter((ix) => ix.r.lixeiraEm).length;
+  $("mLixeira").textContent = nl ? `${nl}` : "";
+  $("menu").showModal();
+});
+document.addEventListener("click", (e) => { if (e.target.closest("[data-fechar]")) e.target.closest("dialog").close(); });
+document.querySelectorAll("dialog").forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close(); }));
+$("menu").addEventListener("click", async (e) => {
+  const m = e.target.closest("[data-menu]")?.dataset.menu;
+  if (!m) return;
+  $("menu").close();
+  if (m === "estudo") { estudo = !estudo; gravarLocal("app.estudo", estudo); buscar(); }
+  if (m === "estatisticas") { desenharEstat(); $("dEstat").showModal(); }
+  if (m === "frases") { desenharFrases(); $("dFrases").showModal(); }
+  if (m === "csv") exportarCsv();
+  if (m === "pdf") exportarPdf();
+  if (m === "lixeira") { vista = "lixeira"; buscar(); }
+  if (m === "filtradosLixeira") {
+    const n = achados.length;
+    if (!n || vista === "lixeira") return msg("Nenhum laudo na busca atual");
+    if (!confirm(`Mover os ${n} laudo(s) da busca atual para a lixeira?\n(dá para restaurar por ${LIXEIRA_DIAS} dias)`)) return;
+    await moverParaLixeira(achados.map((x) => x.r));
+    msg(`${n} laudo(s) na lixeira`);
+    buscar();
+  }
+  if (m === "refazer") refazerResumos(true);
+  if (m === "atalhos") $("dAtalhos").showModal();
+  if (m === "config") abrirConfig();
+});
+
+// ---------- resumos ----------
 async function refazerResumos(forcar) {
   if (forcar) msg("Refazendo resumos...");
   let mudaram = 0;
@@ -326,11 +677,52 @@ async function refazerResumos(forcar) {
     if (["resumo", "conclusao", "titulo", "pars"].some((k) => k in c && JSON.stringify(c[k]) !== JSON.stringify(r[k]))) mudaram++;
     await db.atualizar(r.acc, c);
   }
-  if (mudaram) { msg(`Resumos atualizados em ${mudaram} laudo(s)`); buscar(); }
+  if (mudaram) { msg(`Resumos atualizados em ${mudaram} laudo(s)`); await carregar(); buscar(); }
   else if (forcar) msg("Os resumos já estão no formato atual");
 }
-$("bRefazer").addEventListener("click", () => refazerResumos(true));
-$("oRefazer").addEventListener("click", () => { $("dOpcoes").close(); refazerResumos(true); });
+
+// ---------- tema ----------
+function aplicarTema() {
+  const t = lerLocal("app.tema", "auto");
+  const escuro = t === "escuro" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
+  document.querySelector('meta[name="theme-color"]').content = escuro ? "#121821" : "#0F5C4D";
+}
+$("bTema").addEventListener("click", () => {
+  gravarLocal("app.tema", document.documentElement.dataset.tema === "escuro" ? "claro" : "escuro");
+  aplicarTema();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", aplicarTema);
+
+// ---------- atalhos de teclado ----------
+function selecionar(item, rolar = true) {
+  $("lista").querySelector(".item.sel")?.classList.remove("sel");
+  if (!item) return;
+  item.classList.add("sel");
+  if (rolar) item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+document.addEventListener("keydown", (e) => {
+  if (visorAberto() || document.querySelector("dialog[open]")) return;
+  const digitando = e.target.matches?.("input, textarea, select") || e.target.isContentEditable;
+  if (e.key === "Escape") { if (digitando) e.target.blur(); else { selecionar(null); } return; }
+  if (digitando || e.ctrlKey || e.metaKey || e.altKey) return;
+  const itens = [...$("lista").querySelectorAll(".item")];
+  const atual = $("lista").querySelector(".item.sel");
+  const i = itens.indexOf(atual);
+  const r = atual && acharIx(atual.dataset.acc)?.r;
+  const k = e.key;
+  if (k === "/") { e.preventDefault(); $("q").focus(); $("q").select(); }
+  else if (k === "j") { selecionar(itens[Math.min(itens.length - 1, i + 1)]); if (i + 1 >= itens.length - 2 && mostrando < achados.length) mostrarMais(); }
+  else if (k === "k") selecionar(itens[Math.max(0, i - 1)]);
+  else if (k === "Enter" && atual) abrir(atual);
+  else if (k === "f" && r) anotar(r, { fav: !r.fav }).then(() => selecionar(redesenhar(atual), false));
+  else if (k === "e" && r) editar(atual, r);
+  else if (k === "c" && r) copiar(r);
+  else if (k === "t") $("bTema").click();
+  else if (k === "?") $("dAtalhos").showModal();
+  else return;
+  e.preventDefault();
+});
 
 // ---------- sincronização ----------
 let sincronizando = false;
@@ -338,7 +730,7 @@ async function sincronizarTudo({ manual = false } = {}) {
   if (sincronizando) return;
   sincronizando = true;
   const partes = [];
-  let acordado = null;            // não deixa a tela/PC dormir no meio do envio
+  let acordado = null;
   try { acordado = await navigator.wakeLock?.request("screen"); } catch {}
   try {
     if (await procurarExtensao()) {
@@ -355,9 +747,9 @@ async function sincronizarTudo({ manual = false } = {}) {
       if (extensao() && n.recebidos) { const x = await comExtensao(undefined, msg); if (x.levados) partes.push(`${x.levados} para a extensão`); }
     }
     msg(partes.length ? `Sincronizado: ${partes.join(", ")}` : drive.conectado() ? "Tudo sincronizado" : "");
-    if (partes.length) { await refazerResumos(false); buscar(); }
+    if (partes.length || manual) { await refazerResumos(false); await carregar(); buscar(); }
   } catch (e) {
-    msg(e.login ? "Conecte ao Google Drive (⇅ ou ⚙)" : `Não consegui sincronizar: ${e.message}`);
+    msg(e.login ? "Conecte ao Google Drive (☁)" : `Não consegui sincronizar: ${e.message}`);
   } finally {
     acordado?.release().catch(() => {});
     sincronizando = false;
@@ -365,22 +757,19 @@ async function sincronizarTudo({ manual = false } = {}) {
   }
 }
 let tempoSinc = null;
-function agendarSincronia() {
-  clearTimeout(tempoSinc);
-  tempoSinc = setTimeout(() => sincronizarTudo(), 4000);
-}
-$("bNuvem").addEventListener("click", () => sincronizarTudo({ manual: true }));
-
+function agendarSincronia() { clearTimeout(tempoSinc); tempoSinc = setTimeout(() => sincronizarTudo(), 4000); }
+$("bSync").addEventListener("click", () => sincronizarTudo({ manual: true }));
 function estadoNuvem() {
   const precisa = drive.configurado() && !drive.conectado();
-  $("bNuvem").classList.toggle("alerta", precisa);
-  $("bNuvem").textContent = precisa ? "☁ Conectar e sincronizar" : "⇅ Sincronizar";
+  $("bSync").classList.toggle("alerta", precisa);
+  $("bSync").innerHTML = precisa ? "☁ Conectar<span class=longo> e sincronizar</span>" : "⇅<span class=longo> Sincronizar</span>";
 }
 
 // ---------- configurações ----------
-$("bOpcoes").addEventListener("click", async () => {
+async function abrirConfig() {
   $("oResumo").checked = MOSTRAR_RESUMO;
   $("oCliente").value = lerLocal("app.clienteId", "");
+  $("oTema").value = lerLocal("app.tema", "auto");
   const meta = await db.lerMeta("nuvem", {});
   let total = 0, pend = 0;
   for (const r of await db.todos()) { if (!r.apagado) total++; if (r.nuvemEm !== r.mudadoEm) pend++; }
@@ -394,9 +783,9 @@ $("bOpcoes").addEventListener("click", async () => {
     espaco,
   ].filter(Boolean).join("<br>");
   $("dOpcoes").showModal();
-});
-$("oFechar").addEventListener("click", () => $("dOpcoes").close());
+}
 $("oResumo").addEventListener("change", () => { MOSTRAR_RESUMO = $("oResumo").checked; gravarLocal("app.mostrarResumo", MOSTRAR_RESUMO); buscar(); });
+$("oTema").addEventListener("change", () => { gravarLocal("app.tema", $("oTema").value); aplicarTema(); });
 $("oCliente").addEventListener("change", () => {
   const v = $("oCliente").value.trim();
   gravarLocal("app.clienteId", v);
@@ -405,26 +794,19 @@ $("oCliente").addEventListener("change", () => {
   estadoNuvem();
 });
 $("oConectar").addEventListener("click", async () => {
-  try { await drive.conectar(); $("dOpcoes").close(); sincronizarTudo(); }
+  try { await drive.conectar(); $("dOpcoes").close(); sincronizarTudo({ manual: true }); }
   catch (e) { alert("Não conectou: " + e.message); }
 });
 $("oDesconectar").addEventListener("click", () => { drive.desconectar(); $("dOpcoes").close(); estadoNuvem(); msg("Desconectado do Google Drive"); });
 
-// ---------- filtros ----------
-let tempo = null;
-for (const id of CAMPOS) $(id).addEventListener(["fTexto", "fExame", "fMedico"].includes(id) ? "input" : "change", () => {
-  clearTimeout(tempo);
-  tempo = setTimeout(buscar, 350);
-});
-$("bLimpar").addEventListener("click", () => { for (const id of CAMPOS) $(id).value = ""; buscar(); });
-$("bFiltros").addEventListener("click", () => $("topo").classList.toggle("abertos"));
-
 // ---------- início ----------
+aplicarTema();
 estadoNuvem();
+await carregar();
+await esvaziarVencidos();
 await buscar();
 await refazerResumos(false);
 sincronizarTudo();
-// volta a sincronizar a cada 5 min e quando o app volta para a frente
 setInterval(() => { if (document.visibilityState === "visible") sincronizarTudo(); }, 5 * 60e3);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") sincronizarTudo(); });
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

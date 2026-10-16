@@ -60,7 +60,7 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
 | `lib/ponte.js` | conversa com a extensão (`window.postMessage` ↔ `ponte.js` da extensão ↔ `ponte()` no background dela) |
 | `config.js` | **`clienteId`** do OAuth (já preenchido) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (abre offline; instalar pelo Chrome › "Adicionar à tela inicial") |
-| `ferramentas/testes.mjs` | 14 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
+| `ferramentas/testes.mjs` | 18 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
 | `ferramentas/servidor.mjs` | servidor local `http://localhost:8765` (a extensão também conversa com essa origem) |
 | `ferramentas/gerar_icones.mjs` | gera os ícones |
 Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs` (ids das imagens no Drive), `mudadoEm`, `apagado`.
@@ -84,19 +84,30 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
 3. Melhorias de filtro (o Artur quer a melhor filtragem possível).
 
-## 7. Em escolha (16/10/2026): layout novo + filtros e funções
-**5 layouts mostrados** (mockups de celular; o PC se adapta): 1 Clínico refinado (o atual, verde, mais limpo) ·
-2 Estação PACS (escuro, lista densa, monospace) · 3 Editorial (serif, leitura de revista) · 4 Facetas com contagens
-(chips "TC 31 · Lung-RADS 4", mini-gráfico por mês, etiquetas coloridas de achados) · 5 Material/Google (busca arredondada,
-abas TC/RM/US, botão flutuante). Recomendação: **4 (Facetas)**, com o tema escuro do 2 como opção.
-**Sugestões de filtros** (todas sem tokens): facetas clicáveis com contagem (modalidade, exame/região, médico, período,
-normal/alterado, com imagem); classificações extraídas por regra (BI-RADS, TI-RADS, LI-RADS, PI-RADS, Lung-RADS, Bosniak,
-Fleischner, O-RADS); etiquetas de achado clicáveis; buscar só em conclusão/achados/indicação; medidas ("nódulo > 8 mm");
-tolerância a erro de digitação; ordenar por data/relevância; períodos rápidos (7 d, 30 d, 12 m); filtros salvos sincronizados;
-histórico de buscas.
-**Sugestões de funções**: termos buscados destacados no laudo; favoritos e coleções ("ensino", "revisar") + nota pessoal por
-laudo (sincronizadas); visualizador de imagens em tela cheia com pinça e deslizar; laudos parecidos (mesmas etiquetas);
-estatísticas (por mês, por médico, achados mais comuns); modo estudo/quiz (imagens primeiro, conclusão escondida);
-copiar trechos de conclusão como frases-modelo; exportar resultado (CSV/PDF); lixeira com desfazer (30 dias); atalhos de
-teclado no PC; tema claro/escuro manual.
-Aguardando o Artur escolher o layout e as funções.
+## 7. v2 (16/10/2026): layout, filtros e funções escolhidos pelo Artur
+**Layout**: opção 1 (Clínico refinado, verde) + **tema escuro no estilo da opção 2** (Estação PACS: #0E1116, ciano #4FC3F7,
+destaque âmbar). Botão ◐ alterna; Configurações › Tema: automático/claro/escuro. **Conclusão completa** em todo cartão.
+No PC (≥1000 px) os filtros ficam numa barra lateral; no celular, no botão Filtros.
+**Filtros escolhidos** (sugestões 1, 2, 3, 5, 6, 7, 8 — a 4, medidas tipo "nódulo > 8 mm", ele NÃO quis):
+facetas com contagem (Modalidade, Exame, Médico, Classificações, Achados, Coleções; a contagem de cada grupo ignora o
+próprio grupo) · classificações por regra (: BI/TI/LI/PI/Lung/O-RADS, Bosniak, Fleischner) ·
+buscar em Tudo/Conclusão/Achados/Indicação · busca aproximada (: palavra que não existe em nenhum laudo
+vira a mais parecida, e avisa "Busquei por…") · etiquetas de achado/classificação/coleção clicáveis no cartão · períodos
+rápidos (7 d, 30 d, 12 m, datas) e ordem (recentes, antigos, relevância) · buscas salvas + histórico (sincronizados).
+Número de acesso (5+ dígitos) na busca acha o laudo direto.
+**Funções escolhidas** (todas as 10): termos buscados destacados () · favorito ★, coleções e nota pessoal
+(anotações: , , ,  + ; não vão para a extensão nem mexem no Notion) · visor de
+imagens em tela cheia (: deslizar, pinça, dois toques, roda do mouse, setas) · laudos parecidos (mesmas
+etiquetas/classificações) · estatísticas da busca (por mês, achados, classificações, exames, médicos; tocar filtra) ·
+modo estudo (imagens primeiro, conclusão escondida) · frases-modelo (＋ Frase no laudo aberto usa o trecho selecionado) ·
+exportar CSV (Excel, ";") e PDF (imprimir) · lixeira de 30 dias (depois vira lápide e as imagens saem do Drive) ·
+atalhos (/ j k Enter f e c t Esc ?).
+**Sincronização v2**: junta por partes — conteúdo () e anotações () — então favorito no celular
+e edição no PC no mesmo laudo ficam os dois. Preferências em  (, item a item).
+A ponte com a extensão compara só o conteúdo e preserva as anotações do app. 18 testes em .
+Arquivos novos:  (índice, facetas, ordem, destaque, parecidos, estatísticas), ,
+, , .
+
+## 8. Pendências
+1. Teste de uso da v2 pelo Artur (PC com a extensão e celular).
+2. Ideias futuras citadas: nada pendente além do teste.

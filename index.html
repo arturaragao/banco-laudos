@@ -8,126 +8,259 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<script>
+  // tema antes de desenhar (sem piscar): auto | claro | escuro
+  (() => { let t = "auto"; try { t = JSON.parse(localStorage.getItem("app.tema")) || "auto"; } catch {}
+    const escuro = t === "escuro" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.tema = escuro ? "escuro" : "claro"; })();
+</script>
 <style>
-  :root{--verde:#0F5C4D;--fundo:#EEF1F6;--texto:#202124;--suave:#5F6368;--borda:#DADCE0;--cartao:#fff;--campo:#fff;--leve:#F3F5F8;--acc:#E6F2EF}
-  @media (prefers-color-scheme:dark){:root{--fundo:#15181C;--texto:#E8EAED;--suave:#9AA0A6;--borda:#3C4043;--cartao:#202428;--campo:#2A2F34;--leve:#2A2F34;--acc:#173B33}}
+  :root{--fundo:#EEF1F6;--cartao:#fff;--campo:#fff;--borda:#DADCE0;--borda2:#C5CBD3;--texto:#202124;--suave:#5F6368;--fraco:#9AA0A6;
+    --acento:#0F5C4D;--acento-fundo:#E6F2EF;--acento-texto:#0F5C4D;--topo:#0F5C4D;--topo-texto:#fff;--topo-suave:#BFE3DA;--topo-campo:#fff;--topo-campo-texto:#202124;
+    --destaque:#202124;--mark:#FFF1A8;--mark-texto:#202124;--chip-on:#0F5C4D;--chip-on-texto:#fff;
+    --classe:#EDE7F6;--classe-texto:#4527A0;--achado:#FDECE6;--achado-texto:#8A2C12;--colecao:#E3F2FD;--colecao-texto:#0D47A1;
+    --sombra:0 1px 3px rgba(0,0,0,.07);--normal:#9AA0A6;--perigo:#B3261E;--fav:#E3A008}
+  [data-tema="escuro"]{--fundo:#0E1116;--cartao:#161B22;--campo:#1A2029;--borda:#2A3442;--borda2:#34404F;--texto:#D7DEE8;--suave:#8B98A9;--fraco:#5F6B7A;
+    --acento:#4FC3F7;--acento-fundo:#12303D;--acento-texto:#4FC3F7;--topo:#121821;--topo-texto:#E6EDF3;--topo-suave:#8B98A9;--topo-campo:#1A2029;--topo-campo-texto:#D7DEE8;
+    --destaque:#FFB74D;--mark:rgba(255,183,77,.28);--mark-texto:#FFE0B2;--chip-on:#4FC3F7;--chip-on-texto:#0E1116;
+    --classe:#2A2346;--classe-texto:#C3B5FF;--achado:#3A2219;--achado-texto:#FFB59C;--colecao:#13283D;--colecao-texto:#90CAF9;
+    --sombra:none;--normal:#4A5563;--perigo:#F28B82;--fav:#FFD54F;color-scheme:dark}
   *{box-sizing:border-box}
-  body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--fundo);color:var(--texto);margin:0;-webkit-text-size-adjust:100%}
-  header{background:var(--verde);color:#fff;padding:12px 16px calc(10px);padding-top:max(12px,env(safe-area-inset-top));position:sticky;top:0;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-  header h1{margin:0;font-size:18px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-  header h1 small{font-weight:400;font-size:12.5px;color:#BFE3DA}
-  .filtros{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:10px}
-  .filtros2{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-top:8px;align-items:end}
-  .rot{font-size:11px;color:#BFE3DA;margin-bottom:2px}
-  input,select{width:100%;border:1px solid #C5CBD3;border-radius:7px;padding:7px 8px;font-size:14px;font-family:inherit;background:var(--campo);color:var(--texto)}
-  button{border:1px solid #C5CBD3;background:var(--cartao);border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer;color:var(--texto);white-space:nowrap;font-family:inherit}
-  button:hover{background:var(--leve)}
-  .barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-  .barra .info{font-size:12.5px;color:#E0F2EE;margin-left:auto}
-  #bNuvem.alerta{background:#FFF4CE;color:#5C4400;border-color:#E3B341}
-  #bFiltros{display:none}
-  main{max-width:980px;margin:14px auto;padding:0 12px 80px}
-  .vazio{background:var(--cartao);border-radius:10px;padding:24px;text-align:center;color:var(--suave);line-height:1.5}
-  .item{background:var(--cartao);border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid var(--verde)}
-  .item.normal{border-left-color:#9AA0A6}
-  .cab{font-size:14.5px;font-weight:600;line-height:1.35;cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-  .acc{font-family:Consolas,monospace;background:var(--acc);color:var(--verde);padding:1px 6px;border-radius:5px;user-select:all}
-  @media (prefers-color-scheme:dark){.acc{color:#8FD3C2}}
-  .data{color:var(--suave);font-weight:400}
+  html,body{background:var(--fundo)}
+  body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;color:var(--texto);margin:0;-webkit-text-size-adjust:100%;font-size:14px}
+  button,input,select,textarea{font-family:inherit;font-size:14px;color:var(--texto)}
+  input,select,textarea{width:100%;border:1px solid var(--borda2);border-radius:8px;padding:8px 10px;background:var(--campo)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--acento);outline-offset:-1px}
+  button{border:1px solid var(--borda2);background:var(--cartao);border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+  button:hover{border-color:var(--acento)}
+  .icone{border:none;background:none;padding:4px 6px;font-size:17px;line-height:1;color:inherit}
+  /* topo */
+  header{background:var(--topo);color:var(--topo-texto);position:sticky;top:0;z-index:4;padding:10px 14px 8px;padding-top:max(10px,env(safe-area-inset-top));box-shadow:0 2px 10px rgba(0,0,0,.18);border-bottom:1px solid var(--borda)}
+  .l1{display:flex;align-items:center;gap:8px;max-width:1280px;margin:0 auto}
+  .l1 h1{margin:0;font-size:17px;font-weight:600;flex:1;display:flex;gap:8px;align-items:baseline;min-width:0}
+  .l1 h1 small{font-weight:400;font-size:12px;color:var(--topo-suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .icone{color:var(--topo-texto)}
+  #bSync{background:transparent;color:var(--topo-texto);border-color:rgba(255,255,255,.35);font-size:13px;padding:5px 10px}
+  [data-tema="escuro"] #bSync{border-color:var(--borda2)}
+  #bSync.alerta{background:#FFF4CE;color:#5C4400;border-color:#E3B341}
+  .l2{display:flex;gap:6px;margin:8px auto 0;max-width:1280px}
+  .l2 input{background:var(--topo-campo);color:var(--topo-campo-texto);border-color:transparent;font-size:15px}
+  .l2 select{width:auto;max-width:120px;background:var(--topo-campo);color:var(--topo-campo-texto);border-color:transparent}
+  .l3{display:flex;gap:6px;margin:8px auto 0;max-width:1280px;overflow-x:auto;scrollbar-width:none;align-items:center}
+  .l3::-webkit-scrollbar{display:none}
+  .pilula{border:1px solid rgba(255,255,255,.35);background:transparent;color:var(--topo-texto);border-radius:999px;padding:4px 11px;font-size:12.5px}
+  [data-tema="escuro"] .pilula{border-color:var(--borda2)}
+  .pilula.on{background:var(--topo-texto);color:var(--topo);border-color:var(--topo-texto)}
+  [data-tema="escuro"] .pilula.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
+  .l3 select{width:auto;padding:4px 8px;font-size:12.5px;border-radius:999px;background:transparent;color:var(--topo-texto);border-color:rgba(255,255,255,.35)}
+  .l3 select option{color:#202124}
+  #aviso{max-width:1280px;margin:6px auto 0;font-size:12.5px;color:var(--topo-suave);min-height:0}
+  #aviso:empty{display:none}
+  #aviso b{color:var(--topo-texto)}
+  /* corpo */
+  #corpo{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:270px minmax(0,1fr);gap:16px;padding:14px 14px 90px}
+  aside{position:sticky;top:150px;align-self:start;max-height:calc(100vh - 165px);overflow:auto;font-size:13px}
+  .grupo{margin-bottom:14px}
+  .grupo h3{margin:0 0 6px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--suave);font-weight:600;display:flex;justify-content:space-between}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{border:1px solid var(--borda);background:var(--cartao);border-radius:999px;padding:3px 9px;font-size:12.5px;display:inline-flex;gap:5px;align-items:baseline;max-width:100%}
+  .chip span{color:var(--suave);font-size:11px}
+  .chip.on{background:var(--chip-on);color:var(--chip-on-texto);border-color:var(--chip-on)}
+  .chip.on span{color:inherit;opacity:.8}
+  .chip .nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;font-size:inherit}
+  .mais{border:none;background:none;color:var(--acento-texto);padding:2px 4px;font-size:12px}
+  .datas{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .datas input,.grupo select{padding:6px 8px;font-size:13px}
+  #bLimparTudo{width:100%;margin-top:4px}
+  /* lista */
+  #faixa{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:var(--acento-fundo);color:var(--acento-texto);font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  #faixa:empty{display:none}
+  #faixa button{font-size:12.5px;padding:4px 10px}
+  .vazio{background:var(--cartao);border-radius:12px;padding:28px;text-align:center;color:var(--suave);line-height:1.55;border:1px solid var(--borda)}
+  .item{background:var(--cartao);border:1px solid var(--borda);border-left:4px solid var(--acento);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--sombra);scroll-margin-top:170px}
+  .item.normal{border-left-color:var(--normal)}
+  .item.sel{outline:2px solid var(--acento);outline-offset:1px}
+  .cab{display:flex;gap:6px;align-items:flex-start;font-size:14.5px;font-weight:600;cursor:pointer;line-height:1.35}
+  .acc{font-family:Consolas,"Roboto Mono",monospace;font-weight:500;font-size:12.5px;background:var(--acento-fundo);color:var(--acento-texto);padding:1px 7px;border-radius:6px;user-select:all}
+  .data{color:var(--suave);font-weight:400;font-size:13px}
+  .cabtxt{flex:1;min-width:0;display:flex;gap:4px 8px;align-items:baseline;flex-wrap:wrap}
+  .cabbtn{display:flex;flex:none;margin-top:-2px}
+  .titulo{min-width:0}
+  .cab .icone{font-size:16px;color:var(--fraco)}
+  .cab .fav.on{color:var(--fav)}
   .sub{font-size:12.5px;color:var(--suave);margin-top:3px}
+  .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .tag{font-size:11.5px;border-radius:6px;padding:1px 7px;border:none;cursor:pointer}
+  .tag.classe{background:var(--classe);color:var(--classe-texto);font-weight:600}
+  .tag.achado{background:var(--achado);color:var(--achado-texto)}
+  .tag.colecao{background:var(--colecao);color:var(--colecao-texto)}
   .resumo{font-size:13.5px;font-weight:600;margin-top:6px}
-  .conc[contenteditable]{outline:none;border-radius:6px;padding-top:2px;padding-bottom:2px;cursor:text}
-  .conc[contenteditable]:focus{box-shadow:0 0 0 2px #0F5C4D55}
-  .conc:empty::before{content:"Conclusão — toque para escrever";color:#9AA0A6}
-  .resumo[contenteditable]{outline:none;border-radius:6px;cursor:text}
-  .resumo[contenteditable]:focus{box-shadow:0 0 0 2px #0F5C4D55}
-  .conc{font-size:13.5px;margin:4px 0 0;padding-left:20px;line-height:1.45}
-  .laudo ol{margin:0 0 6px;padding-left:22px}
-  .laudo{margin-top:10px;border-top:1px solid var(--borda);padding-top:10px;font-size:14px;line-height:1.55}
+  .conc{font-size:13.5px;margin:6px 0 0;padding-left:22px;line-height:1.5}
+  .conc li{margin-bottom:2px}
+  .conc b u,.conc u b,.laudo ol b u,.laudo ol u b{color:var(--destaque)}
+  [contenteditable]{outline:none;border-radius:6px;cursor:text}
+  [contenteditable]:focus{box-shadow:0 0 0 2px var(--acento)}
+  .conc:empty::before{content:"Conclusão — toque para escrever";color:var(--fraco)}
+  mark{background:var(--mark);color:var(--mark-texto);border-radius:3px;padding:0 1px}
+  .nota{margin-top:6px;font-size:12.5px;color:var(--suave);font-style:italic}
+  .esconde{margin-top:8px}
+  .laudo{margin-top:10px;border-top:1px solid var(--borda);padding-top:10px;font-size:14px;line-height:1.6}
   .laudo p{margin:0 0 6px}
-  .imgs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  .imgs img{max-height:320px;max-width:100%;border-radius:6px;background:#000;cursor:zoom-in}
-  .imgs .carregando{width:120px;height:120px;border-radius:6px;background:var(--leve);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--suave)}
-  .acoes{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:flex-end}
+  .laudo ol{margin:0 0 6px;padding-left:22px}
+  .laudo.editando{outline:2px solid var(--acento);border-radius:8px;padding:10px}
+  .imgs{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:4px}
+  .imgs img{height:150px;border-radius:8px;background:#000;cursor:zoom-in;flex:none}
+  .imgs .carregando{width:150px;height:150px;flex:none;border-radius:8px;background:var(--campo);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--suave);text-align:center;padding:6px}
+  .acoes{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:flex-end}
   .acoes button{padding:6px 10px;font-size:12.5px}
-  .laudo.editando{outline:2px solid var(--verde);border-radius:6px;padding:10px}
   .rotres{font-size:11.5px;color:var(--suave);flex:1 1 100%;display:block}
   .rotres input{margin-top:3px}
-  .mais{display:block;margin:10px auto}
-  .lixo{margin-left:auto;border:none;background:none;padding:0 4px;font-size:14px;opacity:.45}
-  .lixo:hover{opacity:1;background:none}
-  #zoom{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:9;overflow:auto}
-  #zoom img{max-width:100vw;max-height:100vh;touch-action:pinch-zoom}
-  #fmt{position:fixed;left:0;right:0;bottom:0;display:none;gap:8px;justify-content:center;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:var(--cartao);border-top:1px solid var(--borda);z-index:5}
+  .notaEd{margin-top:10px}
+  .notaEd textarea{min-height:56px;font-size:13px;resize:vertical}
+  .parecidos{margin-top:12px;border-top:1px dashed var(--borda);padding-top:8px;font-size:12.5px}
+  .parecidos b{font-size:11.5px;color:var(--suave);text-transform:uppercase;letter-spacing:.04em}
+  .parecidos a{display:block;color:var(--acento-texto);text-decoration:none;padding:3px 0;cursor:pointer}
+  #mostrarMais{display:block;margin:12px auto}
+  /* visor */
+  #visor{position:fixed;inset:0;background:#000;z-index:20;display:none;touch-action:none;user-select:none}
+  #visor.aberto{display:block}
+  #visor img{position:absolute;left:50%;top:50%;max-width:100vw;max-height:100vh;transform-origin:center;will-change:transform}
+  #visor .vb{position:absolute;background:rgba(0,0,0,.45);color:#fff;border:none;font-size:26px;width:46px;height:46px;border-radius:50%;cursor:pointer}
+  #vFechar{top:max(10px,env(safe-area-inset-top));right:10px}
+  #vAnt{left:8px;top:50%;margin-top:-23px}#vProx{right:8px;top:50%;margin-top:-23px}
+  #vCont{position:absolute;bottom:max(14px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;color:#ddd;font-size:13px}
+  /* barra de formatação (celular) */
+  #fmt{position:fixed;left:0;right:0;bottom:0;display:none;gap:8px;justify-content:center;padding:8px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:var(--cartao);border-top:1px solid var(--borda);z-index:6}
   #fmt button{min-width:48px;font-size:15px}
-  dialog{border:none;border-radius:12px;max-width:520px;width:calc(100% - 24px);background:var(--cartao);color:var(--texto);padding:18px}
-  dialog::backdrop{background:rgba(0,0,0,.45)}
-  dialog h2{margin:0 0 10px;font-size:17px}
+  /* janelas */
+  dialog{border:1px solid var(--borda);border-radius:14px;max-width:640px;width:calc(100% - 24px);background:var(--cartao);color:var(--texto);padding:18px;max-height:88vh}
+  dialog::backdrop{background:rgba(0,0,0,.5)}
+  dialog h2{margin:0 0 12px;font-size:17px;display:flex;justify-content:space-between;align-items:center}
   dialog label{display:block;margin:12px 0 4px;font-size:13px}
   dialog small{color:var(--suave);font-size:12px;line-height:1.45;display:block;margin-top:4px}
   .check{display:flex;gap:8px;align-items:center}
   .check input{width:auto}
-  .linha{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-  #estado{font-size:13px;line-height:1.5;background:var(--leve);border-radius:8px;padding:10px;margin-top:6px}
-  @media (max-width:720px){
-    .filtros{grid-template-columns:1fr}
-    .filtros .medexame{display:none}
-    .filtros2{display:none;grid-template-columns:1fr 1fr}
-    header.abertos .filtros .medexame,header.abertos .filtros2{display:grid}
-    header.abertos .filtros .medexame{display:block}
-    #bFiltros{display:inline-block}
-    .barra .secundario{display:none}
-    .barra .info{flex:1 1 100%;margin-left:0}
+  .linha{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  #estado{font-size:13px;line-height:1.6;background:var(--campo);border-radius:8px;padding:10px}
+  #menu .item-menu{display:flex;width:100%;text-align:left;border:none;border-bottom:1px solid var(--borda);border-radius:0;padding:12px 4px;background:none;gap:10px;font-size:14.5px}
+  #menu .item-menu span{color:var(--suave);margin-left:auto;font-size:12px}
+  .barras{display:grid;grid-template-columns:minmax(0,40%) 1fr auto;gap:4px 8px;align-items:center;font-size:12.5px;margin-bottom:14px}
+  .barras .b{height:10px;border-radius:5px;background:var(--acento);min-width:2px}
+  .barras .r{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  .meses{display:flex;align-items:flex-end;gap:3px;height:110px;margin:6px 0 4px;border-bottom:1px solid var(--borda)}
+  .meses i{flex:1;background:var(--acento);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+  .meses-rot{display:flex;justify-content:space-between;font-size:11px;color:var(--suave);margin-bottom:14px}
+  .numeros{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+  .numeros div{background:var(--campo);border-radius:10px;padding:10px}
+  .numeros b{display:block;font-size:20px}
+  .numeros span{font-size:12px;color:var(--suave)}
+  .frase{border-bottom:1px solid var(--borda);padding:8px 0;display:flex;gap:8px;align-items:flex-start}
+  .frase p{margin:0;flex:1;font-size:13.5px;line-height:1.45;cursor:pointer}
+  kbd{font-family:Consolas,monospace;background:var(--campo);border:1px solid var(--borda2);border-radius:4px;padding:0 5px;font-size:12px}
+  #impressao{display:none}
+  @media (max-width:999px){
+    #corpo{grid-template-columns:minmax(0,1fr);padding:10px 10px 90px}
+    aside{position:static;max-height:none;display:none;background:var(--cartao);border:1px solid var(--borda);border-radius:12px;padding:12px}
+    body.filtros aside{display:block}
+  }
+  @media (min-width:1000px){#bFiltros{display:none}}
+  @media (max-width:600px){.l1 h1{flex-direction:column;gap:0;font-size:16px;line-height:1.2}.l1 h1 small{font-size:11.5px}#bSync .longo{display:none}}
+  @media print{
+    body>*:not(#impressao){display:none!important}
+    #impressao{display:block;color:#000;font-size:11pt}
+    #impressao .p{border-bottom:1px solid #ccc;padding:6pt 0;break-inside:avoid}
+    #impressao h1{font-size:14pt}
   }
 </style>
 </head>
 <body>
 <header id="topo">
-  <h1>Banco de laudos <small id="resumo">carregando…</small></h1>
-  <div class="filtros">
-    <div><div class="rot">Achados / texto do laudo</div><input id="fTexto" type="search" placeholder="nodulo pulmonar; esteatose -leve; &quot;lesao expansiva&quot;"></div>
-    <div class="medexame"><div class="rot">Exame</div><input id="fExame" placeholder="tc torax"></div>
-    <div class="medexame"><div class="rot">Médico</div><input id="fMedico" list="listaMedicos" placeholder="toque para escolher"><datalist id="listaMedicos"></datalist></div>
+  <div class="l1">
+    <h1>Banco de laudos <small id="contagem">carregando…</small></h1>
+    <button id="bSync" title="Sincronizar (Google Drive e extensão)">⇅ Sincronizar</button>
+    <button class="icone" id="bTema" title="Tema claro/escuro" aria-label="Tema">◐</button>
+    <button class="icone" id="bMenu" title="Mais opções" aria-label="Mais opções">⋯</button>
   </div>
-  <div class="filtros2">
-    <div><div class="rot">De</div><input id="fDe" type="date"></div>
-    <div><div class="rot">Até</div><input id="fAte" type="date"></div>
-    <div><div class="rot">Laudos</div><select id="fNormal"><option value="">todos</option><option value="alt">só com alteração</option><option value="normal">só 100% normais</option></select></div>
-    <button id="bLimpar">Limpar</button>
+  <div class="l2">
+    <input id="q" type="search" list="historico" autocomplete="off" placeholder="Buscar: nodulo pulmonar; esteatose -leve; &quot;lesao expansiva&quot;; nº do acesso">
+    <datalist id="historico"></datalist>
+    <select id="onde" title="Onde buscar"><option value="tudo">Tudo</option><option value="conclusao">Conclusão</option><option value="achados">Achados</option><option value="indicacao">Indicação</option></select>
   </div>
-  <div class="barra">
-    <button id="bFiltros">Filtros</button>
-    <button id="bNuvem" title="Traz o que mudou nos outros aparelhos e envia o que mudou aqui (Google Drive e, neste PC, a extensão)">⇅ Sincronizar</button>
-    <button id="bRefazer" class="secundario" title="Refaz o resumo de todos os laudos com as regras atuais">Refazer resumos</button>
-    <button id="bApagarFiltrados" class="secundario" title="Apaga todos os laudos da busca atual (de todos os aparelhos)">🗑 Apagar os filtrados</button>
-    <button id="bOpcoes" aria-label="Configurações">⚙</button>
-    <span class="info" id="msg"></span>
+  <div class="l3">
+    <button class="pilula" id="bFiltros">Filtros</button>
+    <button class="pilula" data-periodo="">Todo período</button>
+    <button class="pilula" data-periodo="7d">7 dias</button>
+    <button class="pilula" data-periodo="30d">30 dias</button>
+    <button class="pilula" data-periodo="12m">12 meses</button>
+    <button class="pilula" id="pFav">★ Favoritos</button>
+    <button class="pilula" id="pImg">🖼 Com imagem</button>
+    <select id="ordem" title="Ordenar"><option value="recente">Mais recentes</option><option value="antigo">Mais antigos</option><option value="relevancia">Relevância</option></select>
   </div>
+  <div id="aviso"></div>
 </header>
-<main>
-  <section id="lista"><div class="vazio">Carregando…</div></section>
-</main>
-<div id="zoom"><img alt=""></div>
+
+<div id="corpo">
+  <aside id="facetas"></aside>
+  <main>
+    <div id="faixa"></div>
+    <section id="lista"><div class="vazio">Carregando…</div></section>
+  </main>
+</div>
+
+<div id="visor"><img alt=""><button class="vb" id="vFechar" aria-label="Fechar">×</button><button class="vb" id="vAnt" aria-label="Anterior">‹</button><button class="vb" id="vProx" aria-label="Próxima">›</button><div id="vCont"></div></div>
 <div id="fmt"><button data-fmt="bold"><b>N</b></button><button data-fmt="italic"><i>I</i></button><button data-fmt="underline"><u>S</u></button></div>
+<div id="impressao"></div>
+
+<dialog id="menu">
+  <h2>Mais opções <button class="icone" data-fechar>×</button></h2>
+  <button class="item-menu" data-menu="estudo">🎓 Modo estudo <span id="mEstudo">desligado</span></button>
+  <button class="item-menu" data-menu="estatisticas">📊 Estatísticas da busca</button>
+  <button class="item-menu" data-menu="frases">💬 Frases-modelo</button>
+  <button class="item-menu" data-menu="csv">⬇ Exportar planilha (CSV)</button>
+  <button class="item-menu" data-menu="pdf">🖨 Exportar PDF / imprimir</button>
+  <button class="item-menu" data-menu="lixeira">🗑 Lixeira <span id="mLixeira"></span></button>
+  <button class="item-menu" data-menu="filtradosLixeira">Mover os laudos da busca para a lixeira</button>
+  <button class="item-menu" data-menu="refazer">Refazer resumos</button>
+  <button class="item-menu" data-menu="atalhos">⌨ Atalhos do teclado</button>
+  <button class="item-menu" data-menu="config">⚙ Configurações</button>
+</dialog>
+
+<dialog id="dEstat"><h2>Estatísticas <button class="icone" data-fechar>×</button></h2><div id="estat"></div></dialog>
+
+<dialog id="dFrases">
+  <h2>Frases-modelo <button class="icone" data-fechar>×</button></h2>
+  <input id="fBusca" type="search" placeholder="Procurar frase">
+  <div id="frases" style="margin-top:8px"></div>
+  <label for="fNova">Nova frase</label>
+  <textarea id="fNova" rows="2" placeholder="Sem alterações significativas em relação ao exame anterior."></textarea>
+  <div class="linha"><button id="fSalvar">Salvar frase</button><small style="margin:0">Toque numa frase para copiar.</small></div>
+</dialog>
+
+<dialog id="dColecoes">
+  <h2>Coleções <button class="icone" data-fechar>×</button></h2>
+  <div id="colLista"></div>
+  <div class="linha"><input id="colNova" placeholder="Nova coleção (ex.: ensino, revisar)" style="flex:1"><button id="colCriar">Criar</button></div>
+</dialog>
+
+<dialog id="dAtalhos">
+  <h2>Atalhos do teclado <button class="icone" data-fechar>×</button></h2>
+  <p style="line-height:2;margin:0"><kbd>/</kbd> buscar · <kbd>j</kbd>/<kbd>k</kbd> próximo/anterior · <kbd>Enter</kbd> abrir/fechar · <kbd>f</kbd> favorito ·
+  <kbd>e</kbd> editar · <kbd>c</kbd> copiar texto · <kbd>t</kbd> tema · <kbd>Esc</kbd> fechar · <kbd>?</kbd> esta ajuda<br>
+  Editando: <kbd>Ctrl+B</kbd> negrito · <kbd>Ctrl+I</kbd> itálico · <kbd>Ctrl+S</kbd>/<kbd>Ctrl+U</kbd> sublinhado</p>
+</dialog>
 
 <dialog id="dOpcoes">
-  <h2>Configurações</h2>
+  <h2>Configurações <button class="icone" data-fechar>×</button></h2>
   <div id="estado">…</div>
-  <div class="linha">
-    <button id="oConectar">Conectar ao Google Drive</button>
-    <button id="oDesconectar">Desconectar</button>
-  </div>
+  <div class="linha"><button id="oConectar">Conectar ao Google Drive</button><button id="oDesconectar">Desconectar</button></div>
+  <label for="oTema">Tema</label>
+  <select id="oTema"><option value="auto">Automático (igual ao aparelho)</option><option value="claro">Claro</option><option value="escuro">Escuro</option></select>
   <label class="check"><input id="oResumo" type="checkbox"> Mostrar o resumo nos cartões</label>
-  <small>Desligado: só a conclusão, com as palavras importantes em negrito e sublinhado.</small>
+  <small>Desligado: só a conclusão completa, com as palavras importantes destacadas.</small>
   <label for="oCliente">ID do cliente OAuth do Google</label>
-  <input id="oCliente" placeholder="123…apps.googleusercontent.com">
+  <input id="oCliente" placeholder="…apps.googleusercontent.com">
   <small>Só se o app pedir. O normal é já vir no app (config.js).</small>
-  <div class="linha">
-    <button id="oRefazer">Refazer resumos</button>
-    <button id="oApagar">🗑 Apagar os filtrados</button>
-    <a id="oNotion" href="https://www.notion.so/3e991fa845d880268d64d80cdbff8515" target="_blank" rel="noopener"><button type="button">Notas Tomografia ↗</button></a>
-  </div>
-  <div class="linha"><button id="oFechar" style="margin-left:auto">Fechar</button></div>
+  <div class="linha"><a href="https://www.notion.so/3e991fa845d880268d64d80cdbff8515" target="_blank" rel="noopener"><button type="button">Notas Tomografia ↗</button></a></div>
 </dialog>
 <script type="module" src="app.js"></script>
 </body>

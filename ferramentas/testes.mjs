@@ -120,7 +120,7 @@ await teste("Celular edita; PC recebe e leva à extensão", async () => {
   const x = await comExtensao(pedirExt);
   assert.equal(x.levados, 1);
   assert.match(ext.laudos.get("A2").pars.flat().map((s) => s.t).join(" "), /parasseptal/);
-  assert.equal((await db.laudo("A2")).mudadoEm, conteudoEm(ext.laudos.get("A2")));
+  assert.equal((await db.laudo("A2")).conteudoMudadoEm, conteudoEm(ext.laudos.get("A2")));
   const y = await comExtensao(pedirExt);
   assert.equal(y.trazidos + y.levados, 0, "não fica indo e voltando");
 });
@@ -228,8 +228,83 @@ await teste("Imagens repetidas no Drive: apaga as cópias, nunca uma imagem usad
   assert.equal(await hashDe(new Blob(["abc"])), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 });
 
-await teste("Resumo: refaz nos registros antigos sem marcar como edição", async () => {
+await teste("Favorito no celular + edição no PC no mesmo laudo: as duas coisas ficam", async () => {
+  await espera();
+  nv.apagarArquivo = async (id) => { drive.arquivos.delete(id); };
+  no(CEL);
+  const agora = Date.now();
+  await db.atualizar("A1", { fav: true, nota: "caso bom", colecoes: ["ensino"], anotEm: agora, mudadoEm: agora });
+  no(PC);
+  await espera();
+  const a1 = await db.laudo("A1");
+  await db.atualizar("A1", camposDaEdicao(a1, pars(["Nódulo — revisado no PC."]), ""));
+  await sincronizar(nv);
+  no(CEL);
+  await sincronizar(nv);
+  no(PC);
+  await sincronizar(nv);
+  for (const ap of [PC, CEL]) {
+    no(ap);
+    const r = await db.laudo("A1");
+    assert.ok(r.fav && r.nota === "caso bom" && r.colecoes[0] === "ensino", "anotações");
+    assert.match(r.texto, /revisado no PC/, "conteúdo");
+  }
+  const x = await comExtensao(pedirExt);
+  assert.equal(x.trazidos, 0);
+  no(PC);
+  assert.ok((await db.laudo("A1")).fav, "favorito não some quando a extensão manda o laudo");
+});
+
+await teste("Preferências (buscas salvas, frases) chegam ao outro aparelho", async () => {
+  const prefs = await import("../lib/prefs.js");
+  no(PC);
+  await prefs.mudar("buscas", "Nódulos", { f: { q: "nodulo pulmonar" } });
+  await prefs.mudar("frases", "f1", { texto: "Sem alterações significativas." });
+  await sincronizar(nv);
+  no(CEL);
+  await prefs.mudar("frases", "f2", { texto: "Controle evolutivo." });
+  await sincronizar(nv);
+  no(PC);
+  await sincronizar(nv);
+  const p = await prefs.ler();
+  assert.equal(p.buscas["Nódulos"].f.q, "nodulo pulmonar");
+  assert.deepEqual(prefs.ativos(p, "frases").map(([k]) => k).sort(), ["f1", "f2"]);
+});
+
+await teste("Lixeira vencida: vira lápide e as imagens saem do Drive", async () => {
+  no(PC);
   const b1 = await db.laudo("B1");
+  const ids = [...b1.imgs];
+  assert.ok(ids.every((id) => drive.arquivos.has(id)));
+  await db.salvar({ acc: "B1", data: b1.data, apagado: true, mudadoEm: Date.now(), nuvemEm: b1.nuvemEm, apagarImgs: ids });
+  await sincronizar(nv);
+  assert.ok(ids.every((id) => !drive.arquivos.has(id)), "imagens apagadas do Drive");
+  assert.equal((await comExtensao(pedirExt)).apagadosLa, 1);
+});
+
+await teste("Classificações, busca aproximada e facetas", async () => {
+  const { classificacoes } = await import("../lib/classificacoes.js");
+  assert.deepEqual(classificacoes("Lesão PI-RADS v2.1 categoria 4. Cisto Bosniak 2F. ACR TI-RADS TR3. Lung-RADS 4A; ver Fleischner. BI-RADS: 0"),
+    ["BI-RADS 0", "TI-RADS 3", "PI-RADS 4", "Lung-RADS 4A", "Bosniak IIF", "Fleischner"]);
+  const { vocabulario, corrigir } = await import("../lib/aproximada.js");
+  const v = vocabulario(["Esteatose hepática difusa.", "Nódulo pulmonar sólido."]);
+  assert.deepEqual(corrigir("esteatsoe -leve", v), { expr: "esteatose -leve", trocas: [["esteatsoe", "esteatose"]] });
+  assert.equal(corrigir("nodul pulm", v).trocas.length, 0, "começo de palavra não é erro");
+  const { indexar, filtrar } = await import("../lib/indice.js");
+  const ixs = [
+    { acc: "11111", data: "2026-10-01", mod: "CT", titulo: "TC DE TÓRAX", medico: "A", texto: "Nódulo pulmonar.", etiquetas: ["nódulo pulmonar"], pars: [] },
+    { acc: "22222", data: "2026-10-02", mod: "CT", titulo: "TC DE ABDOME", medico: "B", texto: "Esteatose.", etiquetas: ["esteatose"], pars: [] },
+    { acc: "33333", data: "2026-10-03", mod: "MR", titulo: "RM DO JOELHO", medico: "A", texto: "Normal.", pars: [] },
+  ].map(indexar);
+  const r = filtrar(ixs, { facetas: { mod: ["TC"] } }, "");
+  assert.deepEqual(r.lista.map((x) => x.r.acc), ["11111", "22222"]);
+  assert.deepEqual(r.contagens.mod, [["TC", 2], ["RM", 1]], "contagem do grupo ignora o próprio filtro");
+  assert.deepEqual(r.contagens.medico, [["A", 1], ["B", 1]]);
+  assert.equal(filtrar(ixs, {}, "22222").lista.length, 1, "número de acesso");
+});
+
+await teste("Resumo: refaz nos registros antigos sem marcar como edição", async () => {
+  no(PC); const b1 = await db.laudo("A1");
   const c = recalculo({ ...b1, resumoVersao: 0 });
   assert.equal(c.resumoVersao, RESUMO_VERSAO);
   assert.ok(!("mudadoEm" in c));
