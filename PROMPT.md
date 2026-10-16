@@ -34,6 +34,11 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
   (`max(salvoEm, conteudoEditadoEm, resumoManualEm)` na extensão), porque a sincronização com o Notion mexe no `editadoEm`
   sem mudar o texto. Edição levada à extensão → ela reescreve o toggle no Notion na próxima sincronização.
   **Limite**: laudos copiados pela extensão só chegam ao Drive quando o app é aberto naquele PC (deixar uma aba fixa).
+- **Ordem do envio** (corrigida em 16/10 depois do 1º teste: o PC mandava as imagens primeiro, uma a uma, ~2 s cada; a aba
+  parou no meio e o Drive ficou só com imagens, sem nenhum `laudos-*.json.gz`, e o celular não recebeu nada): agora vai
+  **primeiro o texto de todos os meses**, depois as imagens **4 laudos em paralelo**, regravando os meses a cada 20 laudos;
+  cada imagem enviada é anotada na hora (se parar, continua de onde parou). Durante a sincronização a tela não dorme
+  (Wake Lock). As imagens duplicadas da 1ª tentativa ficam soltas na pasta "imagens" (inofensivas).
 - **Celular**: o texto de todos os laudos fica no aparelho (busca offline); as imagens baixam do Drive ao abrir o laudo e
   ficam guardadas.
 - **Login Google**: token de 1 h, sem servidor (Google Identity Services). Depois de 1 h, o botão vira
@@ -51,7 +56,7 @@ Portal Vue Motion → extensão (banco do Chrome do PC) ⇄ app aberto NESSE PC 
 | `lib/ponte.js` | conversa com a extensão (`window.postMessage` ↔ `ponte.js` da extensão ↔ `ponte()` no background dela) |
 | `config.js` | **`clienteId`** do OAuth (já preenchido) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (abre offline; instalar pelo Chrome › "Adicionar à tela inicial") |
-| `ferramentas/testes.mjs` | 12 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
+| `ferramentas/testes.mjs` | 13 testes da sincronização (Drive e extensão falsos, PC + celular): `npm i && npm test` |
 | `ferramentas/servidor.mjs` | servidor local `http://localhost:8765` (a extensão também conversa com essa origem) |
 | `ferramentas/gerar_icones.mjs` | gera os ícones |
 Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs` (ids das imagens no Drive), `mudadoEm`, `apagado`.
@@ -70,8 +75,7 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
 5. Copiar o **ID do cliente** (termina em `.apps.googleusercontent.com`) e mandar na conversa → vai para `config.js`.
 
 ## 6. Pendências
-1. ✅ 16/10/2026: ID OAuth criado (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", em `config.js`) e
-   **sincronização funcionando no celular** (PC com a extensão → Drive → celular). Se o navegador mostrar "falta o ID",
-   é cópia antiga em cache: Ctrl+Shift+R (o sw.js agora sempre revalida com `cache: "no-cache"`).
+1. ID OAuth criado em 16/10 (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", já em `config.js`). Falta testar: PC com a extensão (abrir o app, ⚙ › Conectar, ⇅) e
+   depois o celular (abrir o link no Chrome, Conectar, "Adicionar à tela inicial").
 2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
 3. Melhorias de filtro (o Artur quer a melhor filtragem possível).

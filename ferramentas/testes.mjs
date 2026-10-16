@@ -198,6 +198,24 @@ await teste("Edições ao mesmo tempo no mesmo mês, em aparelhos diferentes: as
   assert.match((await db.laudo("B1")).texto, /no PC/);
 });
 
+await teste("Parou no meio das imagens: o texto já está na nuvem e depois continua de onde parou", async () => {
+  no(PC);
+  novoExt("C1", "2026-08-02", ["Cisto renal simples."], 6);
+  await comExtensao(pedirExt);
+  const enviar = nv.enviarImagem;
+  let n = 0;
+  nv.enviarImagem = async (...a) => { if (++n > 3) throw new Error("caiu a internet"); return enviar(...a); };
+  await assert.rejects(sincronizar(nv));
+  nv.enviarImagem = enviar;
+  assert.ok((await nv.listar()).some((s) => s.nome === "laudos-2026-08.json.gz"), "texto enviado antes das imagens");
+  assert.equal((await db.laudo("C1")).imgs.length, 3);
+  const r = await sincronizar(nv);
+  assert.equal(r.imagens, 3);
+  no(CEL);
+  await sincronizar(nv);
+  assert.equal((await db.laudo("C1")).imgs.length, 6);
+});
+
 await teste("Resumo: refaz nos registros antigos sem marcar como edição", async () => {
   const b1 = await db.laudo("B1");
   const c = recalculo({ ...b1, resumoVersao: 0 });

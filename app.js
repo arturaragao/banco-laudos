@@ -338,6 +338,8 @@ async function sincronizarTudo({ manual = false } = {}) {
   if (sincronizando) return;
   sincronizando = true;
   const partes = [];
+  let acordado = null;            // não deixa a tela/PC dormir no meio do envio
+  try { acordado = await navigator.wakeLock?.request("screen"); } catch {}
   try {
     if (await procurarExtensao()) {
       const x = await comExtensao(undefined, msg);
@@ -357,6 +359,7 @@ async function sincronizarTudo({ manual = false } = {}) {
   } catch (e) {
     msg(e.login ? "Conecte ao Google Drive (⇅ ou ⚙)" : `Não consegui sincronizar: ${e.message}`);
   } finally {
+    acordado?.release().catch(() => {});
     sincronizando = false;
     estadoNuvem();
   }
