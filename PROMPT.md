@@ -78,36 +78,43 @@ Campos só locais (não vão à nuvem): `nuvemEm`, `imgsLocais`. Na nuvem: `imgs
    `https://arturaragao.github.io` e `http://localhost:8765`. Sem URI de redirecionamento.
 5. Copiar o **ID do cliente** (termina em `.apps.googleusercontent.com`) e mandar na conversa → vai para `config.js`.
 
-## 6. Pendências
-1. ID OAuth criado em 16/10 (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", já em `config.js`). Falta testar: PC com a extensão (abrir o app, ⚙ › Conectar, ⇅) e
-   depois o celular (abrir o link no Chrome, Conectar, "Adicionar à tela inicial").
-2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
-3. Melhorias de filtro (o Artur quer a melhor filtragem possível).
+## 6. Histórico do teste de uso
+- ID OAuth criado em 16/10 (`52135680165-osm3…apps.googleusercontent.com`, projeto "Banco de laudos", já em `config.js`).
+- 1º teste (16/10): o PC enviou só parte das imagens e nenhum texto (corrigido: texto primeiro, imagens em paralelo e
+  retomáveis); imagens repetidas no Drive (corrigido: nada repete, cópias antigas apagadas uma vez).
 
 ## 7. v2 (16/10/2026): layout, filtros e funções escolhidos pelo Artur
 **Layout**: opção 1 (Clínico refinado, verde) + **tema escuro no estilo da opção 2** (Estação PACS: #0E1116, ciano #4FC3F7,
 destaque âmbar). Botão ◐ alterna; Configurações › Tema: automático/claro/escuro. **Conclusão completa** em todo cartão.
-No PC (≥1000 px) os filtros ficam numa barra lateral; no celular, no botão Filtros.
+No PC (≥ 1000 px) os filtros ficam numa barra lateral; no celular, no botão "Filtros".
+As outras opções mostradas (não escolhidas): 3 Editorial, 4 Facetas (a ideia de facetas entrou mesmo assim), 5 Material.
+
 **Filtros escolhidos** (sugestões 1, 2, 3, 5, 6, 7, 8 — a 4, medidas tipo "nódulo > 8 mm", ele NÃO quis):
-facetas com contagem (Modalidade, Exame, Médico, Classificações, Achados, Coleções; a contagem de cada grupo ignora o
-próprio grupo) · classificações por regra (: BI/TI/LI/PI/Lung/O-RADS, Bosniak, Fleischner) ·
-buscar em Tudo/Conclusão/Achados/Indicação · busca aproximada (: palavra que não existe em nenhum laudo
-vira a mais parecida, e avisa "Busquei por…") · etiquetas de achado/classificação/coleção clicáveis no cartão · períodos
-rápidos (7 d, 30 d, 12 m, datas) e ordem (recentes, antigos, relevância) · buscas salvas + histórico (sincronizados).
-Número de acesso (5+ dígitos) na busca acha o laudo direto.
-**Funções escolhidas** (todas as 10): termos buscados destacados () · favorito ★, coleções e nota pessoal
-(anotações: , , ,  + ; não vão para a extensão nem mexem no Notion) · visor de
-imagens em tela cheia (: deslizar, pinça, dois toques, roda do mouse, setas) · laudos parecidos (mesmas
-etiquetas/classificações) · estatísticas da busca (por mês, achados, classificações, exames, médicos; tocar filtra) ·
-modo estudo (imagens primeiro, conclusão escondida) · frases-modelo (＋ Frase no laudo aberto usa o trecho selecionado) ·
-exportar CSV (Excel, ";") e PDF (imprimir) · lixeira de 30 dias (depois vira lápide e as imagens saem do Drive) ·
-atalhos (/ j k Enter f e c t Esc ?).
-**Sincronização v2**: junta por partes — conteúdo () e anotações () — então favorito no celular
-e edição no PC no mesmo laudo ficam os dois. Preferências em  (, item a item).
-A ponte com a extensão compara só o conteúdo e preserva as anotações do app. 18 testes em .
-Arquivos novos:  (índice, facetas, ordem, destaque, parecidos, estatísticas), ,
-, , .
+- facetas com contagem: Modalidade, Exame, Médico, Classificações, Achados, Coleções (a contagem de cada grupo ignora o
+  próprio grupo; 8 por grupo + "todos");
+- classificações por regra (`lib/classificacoes.js`): BI-RADS, TI-RADS, LI-RADS, PI-RADS, Lung-RADS, O-RADS, Bosniak, Fleischner;
+- buscar em Tudo / Conclusão / Achados / Indicação;
+- busca aproximada (`lib/aproximada.js`): palavra que não existe em nenhum laudo vira a mais parecida e aparece
+  "Busquei por …";
+- etiquetas de achado / classificação / coleção clicáveis no cartão;
+- períodos rápidos (7 d, 30 d, 12 m, datas) e ordem (recentes, antigos, relevância);
+- buscas salvas + histórico (sincronizados). Número de acesso (5+ dígitos) na busca acha o laudo direto.
+
+**Funções escolhidas** (todas as 10):
+termos buscados destacados (`<mark>`) · favorito ★, coleções e nota pessoal (anotações `fav`, `colecoes`, `nota`,
+`lixeiraEm` + `anotEm`; não vão para a extensão nem mexem no Notion) · visor de imagens em tela cheia (`ui/visor.js`:
+deslizar, pinça, dois toques, roda do mouse, setas) · laudos parecidos (mesmas etiquetas/classificações, +exame igual) ·
+estatísticas da busca (por mês, achados, classificações, exames, médicos; tocar filtra) · modo estudo (imagens primeiro,
+conclusão escondida) · frases-modelo (＋ Frase no laudo aberto usa o trecho selecionado; ⋯ › Frases-modelo) · exportar
+CSV (Excel, ";") e PDF (imprimir) · lixeira de 30 dias (depois vira lápide e as imagens saem do Drive) · atalhos
+(`/` `j` `k` Enter `f` `e` `c` `t` Esc `?`).
+
+**Sincronização v2**: junta por partes — conteúdo (`conteudoMudadoEm`) e anotações (`anotEm`) — então favorito no celular e
+edição no PC no mesmo laudo ficam os dois. Preferências em `preferencias.json.gz` (`lib/prefs.js`, item a item: buscas,
+histórico, frases, coleções). A ponte com a extensão compara só o conteúdo e preserva as anotações do app.
+Arquivos novos: `lib/indice.js` (índice, facetas, ordem, destaque, parecidos, estatísticas), `lib/classificacoes.js`,
+`lib/aproximada.js`, `lib/prefs.js`, `ui/visor.js`. Testes: 18 em `ferramentas/testes.mjs`.
 
 ## 8. Pendências
-1. Teste de uso da v2 pelo Artur (PC com a extensão e celular).
-2. Ideias futuras citadas: nada pendente além do teste.
+1. Teste de uso da v2 pelo Artur: PC com a extensão (Ctrl+Shift+R, ⇅ até terminar as imagens) e depois o celular.
+2. Depois do teste: decidir se a página Banco da extensão passa a abrir o app e se o Notion é desligado.
