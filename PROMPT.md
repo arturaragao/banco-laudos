@@ -9,7 +9,7 @@
 1. Pedir ao Claude Code: "leia o PROMPT.md do repositório arturaragao/banco-laudos e o extensao-laudos-vue/PROMPT.md do
    arturaragao/Artur- e vamos continuar". Precisa de Git + `gh` logado (`gh auth login`) e Node.js.
 2. Clonar: `gh repo clone arturaragao/banco-laudos` (público) e `gh repo clone arturaragao/Artur-` (privado; branch padrão
-   `claude/vigilant-pasteur-abqqee`). No banco-laudos: `npm i` e `npm test` (21 testes) · `npm run dev` = http://localhost:8765
+   `main`). No banco-laudos: `npm i` e `npm test` (21 testes) · `npm run dev` = http://localhost:8765
    (a extensão também conversa com essa origem).
 3. Publicar = `git push` na `main` do banco-laudos (GitHub Pages atualiza em ~1 min; o service worker busca a versão nova —
    subir `CACHE` no `sw.js` a cada publicação). Extensão = PR + merge automático na branch padrão do Artur- e subir `version`.
